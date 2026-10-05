@@ -1,10 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import TablatureRequest, TablatureResponse
-from app.domain.catalog import find_chord
 from app.domain.chord import ChordNode, NOTES, Note
 
 router = APIRouter()
+_all_chords = ChordNode.build_all()
+_known_chords = {chord.id.lower(): chord for chord in _all_chords}
 
 TUNING = ["e", "B", "G", "D", "A", "E"]
 STRING_NOTES = [Note.E, Note.B, Note.G, Note.D, Note.A, Note.E]
@@ -31,25 +32,6 @@ COMMON_SHAPES: dict[str, list[str]] = {
     "B": ["2", "4", "4", "4", "2", "x"],
     "Bm": ["2", "3", "4", "4", "2", "x"],
     "B7": ["2", "0", "2", "1", "2", "x"],
-    "Cmaj7": ["0", "0", "0", "2", "3", "x"],
-    "Dmaj7": ["2", "2", "2", "0", "x", "x"],
-    "Emaj7": ["0", "0", "1", "1", "2", "0"],
-    "Fmaj7": ["0", "1", "2", "3", "x", "x"],
-    "Gmaj7": ["2", "0", "0", "0", "2", "3"],
-    "Amaj7": ["0", "2", "1", "2", "0", "x"],
-    "Am7": ["0", "1", "0", "2", "0", "x"],
-    "Dm7": ["1", "1", "2", "0", "x", "x"],
-    "Em7": ["0", "3", "0", "2", "2", "0"],
-    "Bm7": ["2", "3", "2", "4", "2", "x"],
-    "Bm7b5": ["x", "3", "2", "3", "2", "x"],
-    "Dsus2": ["0", "3", "2", "0", "x", "x"],
-    "Dsus4": ["3", "3", "2", "0", "x", "x"],
-    "Asus2": ["0", "0", "2", "2", "0", "x"],
-    "Asus4": ["0", "3", "2", "2", "0", "x"],
-    "Esus4": ["0", "0", "2", "2", "2", "0"],
-    "Cadd9": ["0", "3", "0", "2", "3", "x"],
-    "E5": ["x", "x", "x", "2", "2", "0"],
-    "A5": ["x", "x", "x", "2", "0", "x"],
 }
 
 
@@ -58,7 +40,13 @@ def note_index(note: Note) -> int:
 
 
 def normalize_chords(chords: list[str]) -> list[ChordNode]:
-    return [find_chord(chord) for chord in chords]
+    normalized: list[ChordNode] = []
+    for chord in chords:
+        match = _known_chords.get(chord.lower())
+        if not match:
+            raise HTTPException(status_code=400, detail=f"Unknown chord: {chord}")
+        normalized.append(match)
+    return normalized
 
 
 def fret_for_note(open_note: Note, target: Note, max_fret: int = 7) -> str | None:
@@ -72,7 +60,7 @@ def fallback_shape(chord: ChordNode) -> list[str]:
     frets = ["x", "x", "x", "x", "x", "x"]
     used_notes: set[Note] = set()
     for string_index, open_note in enumerate(STRING_NOTES[:4]):
-        options = [note for note in chord.notes if note not in used_notes] or list(chord.notes)
+        options = [note for note in chord.triad if note not in used_notes] or list(chord.triad)
         best = min(
             ((fret_for_note(open_note, note), note) for note in options),
             key=lambda item: int(item[0]) if item[0] is not None else 99,

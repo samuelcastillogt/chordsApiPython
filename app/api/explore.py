@@ -1,10 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import ConnectionsResponse, ExploreRequest, ExploreResponse
-from app.domain.catalog import CORE_CHORDS, find_chord
+from app.domain.chord import ChordNode
 from app.engine.connection_engine import find_connections
 
 router = APIRouter()
+_all_chords = ChordNode.build_all()
 
 
 TENSION_CATEGORY = {
@@ -16,6 +17,13 @@ TENSION_CATEGORY = {
     "extreme": "extrema",
     "extrema": "extrema",
 }
+
+
+def get_chord_or_404(chord_id: str) -> ChordNode:
+    current = next((c for c in _all_chords if c.id.lower() == chord_id.lower()), None)
+    if not current:
+        raise HTTPException(status_code=404, detail="Chord not found")
+    return current
 
 
 def serialize_connection(connection) -> dict:
@@ -41,8 +49,9 @@ async def get_connections(
     min_score: float = 0,
     max_results: int = 12,
 ):
-    current = find_chord(chord_id, status_code=404)
-    connections = find_connections(current, CORE_CHORDS, tonality, min_score, max(1, min(max_results, 72)))
+    current = get_chord_or_404(chord_id)
+
+    connections = find_connections(current, _all_chords, tonality, min_score, max_results)
     return {
         "source": current.id,
         "connections": [serialize_connection(connection) for connection in connections],
@@ -52,8 +61,14 @@ async def get_connections(
 
 @router.post("/explore", response_model=ExploreResponse)
 async def explore_next_chords(request: ExploreRequest):
-    current = find_chord(request.currentChord, status_code=404)
-    connections = find_connections(current, CORE_CHORDS, tonality=request.tonality, max_results=len(CORE_CHORDS))
+    current = get_chord_or_404(request.currentChord)
+    connections = find_connections(
+        current,
+        _all_chords,
+        tonality=request.tonality,
+        min_score=0,
+        max_results=len(_all_chords),
+    )
     if request.preferredTension:
         category = TENSION_CATEGORY[request.preferredTension]
         connections = [item for item in connections if item.category == category]
@@ -65,10 +80,10 @@ async def explore_next_chords(request: ExploreRequest):
                 "chord": item.target.id,
                 "score": item.total,
                 "category": item.category,
-                "explanation": next(
-                    (criterion.details for criterion in item.breakdown if criterion.name == "transformation"),
-                    "",
-                ) + f" · conexión {item.category} ({item.total}).",
+                "explanation": (
+                    f"{item.target.id} es una conexión {item.category} desde "
+                    f"{current.id} con score {item.total}."
+                ),
             }
             for item in connections
         ],

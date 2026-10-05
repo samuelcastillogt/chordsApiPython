@@ -1,33 +1,9 @@
-from functools import lru_cache
-
-from app.domain.chord import ChordNode
+from app.domain.chord import ChordNode, ChordType
 from app.domain.connection import ConnectionScore, CriterionScore
-from app.engine import criteria
 from app.engine.weights import WEIGHTS
+from app.engine import criteria
 
-CRITERIA = (
-    ("shared_notes", lambda a, b, key: criteria.shared_notes(a, b)),
-    ("circle_distance", lambda a, b, key: criteria.circle_distance(a, b)),
-    ("voice_movement", lambda a, b, key: criteria.voice_movement(a, b)),
-    ("transformation", lambda a, b, key: criteria.transformation_type(a, b)),
-    ("tonal_function", lambda a, b, key: criteria.tonal_function(a, b, key)),
-    ("dominant_chain", lambda a, b, key: criteria.dominant_chain(a, b)),
-    ("glue_magic", lambda a, b, key: criteria.glue_magic(a, b)),
-)
-
-
-def category_for(total: float) -> str:
-    return "natural" if total >= 70 else "media" if total >= 50 else "tensa" if total >= 30 else "extrema"
-
-
-@lru_cache(maxsize=65536)
-def score_connection(source: ChordNode, target: ChordNode, tonality: str | None = None) -> ConnectionScore:
-    breakdown = []
-    for name, evaluate in CRITERIA:
-        raw, detail = evaluate(source, target, tonality)
-        breakdown.append(CriterionScore(name, WEIGHTS[name], raw, raw * WEIGHTS[name], detail))
-    total = round(sum(item.weighted_score for item in breakdown), 1)
-    return ConnectionScore(source=source, target=target, total=total, category=category_for(total), breakdown=breakdown)
+_score_cache: dict[tuple[str, str, str | None], ConnectionScore] = {}
 
 
 def find_connections(
@@ -36,34 +12,52 @@ def find_connections(
     tonality: str | None = None,
     min_score: float = 0,
     max_results: int = 12,
-    distinct: bool = True,
 ) -> list[ConnectionScore]:
-    """Ranks candidate next chords.
-
-    With ``distinct`` only the best voicing per root and chord family is kept,
-    so C does not recommend C7, Cmaj7 and C6 as if they were different moves.
-    """
-    scored = [
-        score_connection(current, candidate, tonality)
-        for candidate in all_chords
-        if candidate.id != current.id
-    ]
-    scored.sort(key=lambda item: item.total, reverse=True)
-
     results: list[ConnectionScore] = []
-    seen: set[tuple[str, str]] = set()
-    for connection in scored:
-        target = connection.target
-        if connection.total < min_score:
-            break
-        if distinct:
-            group = (target.root.value, target.family)
-            if target.root == current.root and target.family == current.family:
-                continue
-            if group in seen:
-                continue
-            seen.add(group)
-        results.append(connection)
-        if len(results) >= max_results:
-            break
-    return results
+    for candidate in all_chords:
+        if candidate.id == current.id:
+            continue
+
+        cache_key = (current.id, candidate.id, tonality)
+        cached = _score_cache.get(cache_key)
+        if cached:
+            if cached.total >= min_score:
+                results.append(cached)
+            continue
+
+        scores: list[CriterionScore] = []
+
+        raw, detail = criteria.shared_notes(current, candidate)
+        scores.append(CriterionScore("shared_notes", WEIGHTS["shared_notes"], raw, raw * WEIGHTS["shared_notes"], detail))
+
+        raw, detail = criteria.circle_distance(current, candidate)
+        scores.append(CriterionScore("circle_distance", WEIGHTS["circle_distance"], raw, raw * WEIGHTS["circle_distance"], detail))
+
+        raw, detail = criteria.voice_movement(current, candidate)
+        scores.append(CriterionScore("voice_movement", WEIGHTS["voice_movement"], raw, raw * WEIGHTS["voice_movement"], detail))
+
+        raw, detail = criteria.transformation_type(current, candidate)
+        scores.append(CriterionScore("transformation", WEIGHTS["transformation"], raw, raw * WEIGHTS["transformation"], detail))
+
+        raw, detail = criteria.tonal_function(current, candidate, tonality)
+        scores.append(CriterionScore("tonal_function", WEIGHTS["tonal_function"], raw, raw * WEIGHTS["tonal_function"], detail))
+
+        raw, detail = criteria.dominant_chain(current, candidate)
+        scores.append(CriterionScore("dominant_chain", WEIGHTS["dominant_chain"], raw, raw * WEIGHTS["dominant_chain"], detail))
+
+        raw, detail = criteria.glue_magic(current, candidate)
+        scores.append(CriterionScore("glue_magic", WEIGHTS["glue_magic"], raw, raw * WEIGHTS["glue_magic"], detail))
+
+        total = round(sum(s.weighted_score for s in scores), 1)
+
+        category = "natural" if total >= 80 else "media" if total >= 50 else "tensa" if total >= 20 else "extrema"
+
+        connection = ConnectionScore(
+            source=current, target=candidate, total=total, category=category, breakdown=scores
+        )
+        _score_cache[cache_key] = connection
+        if total >= min_score:
+            results.append(connection)
+
+    results.sort(key=lambda r: r.total, reverse=True)
+    return results[:max_results]
