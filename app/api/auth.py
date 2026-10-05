@@ -1,53 +1,54 @@
-import hashlib
-import secrets
-from datetime import UTC, datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import APIRouter, HTTPException, status
-from jose import jwt
-
-from app.api.schemas import AuthRequest, TokenResponse
-from app.core.config import settings
+from app.api.schemas import AuthRequest, TokenResponse, UserResponse
+from app.core.security import (
+    EMAIL_RE,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    require_auth_enabled,
+    verify_password,
+)
+from app.db import get_session
+from app.models import User
 
 router = APIRouter()
-_users: dict[str, dict[str, str]] = {}
 
 
-def hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
-    password_salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        password_salt.encode("utf-8"),
-        120_000,
-    ).hex()
-    return password_salt, digest
+def serialize_user(user: User) -> dict:
+    return {"id": user.id, "email": user.email, "displayName": user.display_name}
 
 
-def create_access_token(email: str) -> str:
-    expires_at = datetime.now(UTC) + timedelta(
-        minutes=settings.access_token_expire_minutes
-    )
-    payload = {"sub": email, "exp": expires_at}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+def token_response(user: User) -> dict:
+    return {"accessToken": create_access_token(user.id), "user": serialize_user(user)}
 
 
 @router.post("/auth/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: AuthRequest):
-    email = request.email.lower()
-    if email in _users:
+async def register(request: AuthRequest, session: AsyncSession = Depends(get_session)):
+    require_auth_enabled()
+    email = request.email.strip().lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=422, detail="Email inválido")
+    existing = await session.scalar(select(User).where(User.email == email))
+    if existing:
         raise HTTPException(status_code=409, detail="User already exists")
-    salt, password_hash = hash_password(request.password)
-    _users[email] = {"salt": salt, "password_hash": password_hash}
-    return {"accessToken": create_access_token(email)}
+    user = User(email=email, display_name=(request.displayName or "").strip() or None, password_hash=hash_password(request.password))
+    session.add(user)
+    await session.commit()
+    return token_response(user)
 
 
 @router.post("/auth/login", response_model=TokenResponse)
-async def login(request: AuthRequest):
-    email = request.email.lower()
-    user = _users.get(email)
-    if not user:
+async def login(request: AuthRequest, session: AsyncSession = Depends(get_session)):
+    require_auth_enabled()
+    user = await session.scalar(select(User).where(User.email == request.email.strip().lower()))
+    if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    _, password_hash = hash_password(request.password, user["salt"])
-    if not secrets.compare_digest(password_hash, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"accessToken": create_access_token(email)}
+    return token_response(user)
+
+
+@router.get("/auth/me", response_model=UserResponse)
+async def me(user: User = Depends(get_current_user)):
+    return serialize_user(user)
