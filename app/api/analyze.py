@@ -2,60 +2,71 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.explore import serialize_connection
 from app.api.schemas import AnalyzeRequest, AnalyzeResponse
-from app.domain.chord import ChordNode
-from app.engine.connection_engine import find_connections
+from app.domain.catalog import BY_ID, parse
+from app.domain.chord import ChordParseError
+from app.domain.theory import analyze_chord, detect_key, parse_key, suggest_substitutions
+from app.engine.connection_engine import score_connection
 
 router = APIRouter()
-_all_chords = ChordNode.build_all()
 
 
-def chord_by_id(chord_id: str) -> ChordNode:
-    chord = next((item for item in _all_chords if item.id.lower() == chord_id.lower()), None)
-    if not chord:
-        raise HTTPException(status_code=400, detail=f"Unknown chord: {chord_id}")
-    return chord
-
-
-@router.post("/analyze", response_model=AnalyzeResponse)
+@router.post("/analyze", response_model=AnalyzeResponse, response_model_by_alias=True)
 async def analyze_progression(request: AnalyzeRequest):
-    chords = [chord_by_id(chord_id) for chord_id in request.chords]
+    """Explains a progression: key, roman numerals, functions, tension and substitutions."""
+    try:
+        parsed = [parse(symbol) for symbol in request.chords]
+    except ChordParseError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    chords = [item.chord for item in parsed]
+
+    key = parse_key(request.tonality)
+    detected = key is None
+    confidence = 1.0
+    if key is None:
+        guess = detect_key(chords)
+        key, confidence = guess.key, guess.confidence
+    tonality = key.id
+
+    degrees = []
+    for item in parsed:
+        result = analyze_chord(item.chord, key)
+        degrees.append({
+            "input": item.input,
+            "chord": item.chord.id,
+            "numeral": result.numeral,
+            "function": result.function,
+            "role": result.role,
+            "explanation": result.explanation,
+            "approximated": item.approximated,
+            "substitutions": [vars(sub) for sub in suggest_substitutions(item.chord, key, BY_ID)],
+        })
+
     connections = []
     tension_curve = []
+    for source, target in zip(chords, chords[1:]):
+        connection = score_connection(source, target, tonality)
+        connections.append({"source": source.id, **serialize_connection(connection)})
+        tension_curve.append({"from": source.id, "to": target.id, "score": connection.total, "category": connection.category})
 
-    for index, source in enumerate(chords[:-1]):
-        target = chords[index + 1]
-        matches = find_connections(
-            source,
-            _all_chords,
-            tonality=request.tonality,
-            min_score=0,
-            max_results=len(_all_chords),
-        )
-        connection = next(item for item in matches if item.target.id == target.id)
-        serialized = serialize_connection(connection)
-        connections.append({"source": source.id, **serialized})
-        tension_curve.append(
-            {
-                "from": source.id,
-                "to": target.id,
-                "score": connection.total,
-                "category": connection.category,
-            }
-        )
-
-    average_score = round(
-        sum(item["score"] for item in tension_curve) / len(tension_curve),
-        1,
-    )
+    average_score = round(sum(point["score"] for point in tension_curve) / len(tension_curve), 1)
+    roles = [degree["role"] for degree in degrees]
     suggestions = []
     if average_score < 50:
-        suggestions.append("La progresión tiene alta tensión; prueba insertar acordes puente.")
+        suggestions.append("La progresión tiene alta tensión; prueba insertar acordes puente o una dominante antes de los saltos.")
     else:
         suggestions.append("La progresión mantiene continuidad armónica estable.")
+    if "secondary_dominant" in roles:
+        suggestions.append("Usa dominantes secundarias: cada una empuja hacia el acorde que la sigue.")
+    if "borrowed" in roles:
+        suggestions.append(f"Tiene acordes prestados del modo paralelo, que dan color fuera de {key.label}.")
+    if all(role == "diatonic" for role in roles):
+        suggestions.append(f"Todos los acordes pertenecen a {key.label}; prueba una sustitución para sorprender.")
 
     return {
         "analysis": {
             "chords": [chord.id for chord in chords],
+            "key": {"id": key.id, "label": key.label, "mode": key.mode, "confidence": confidence, "detected": detected},
+            "degrees": degrees,
             "connections": connections,
             "tensionCurve": tension_curve,
             "averageScore": average_score,
