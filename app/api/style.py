@@ -46,7 +46,9 @@ async def learn_style(request: StyleLearnRequest):
         else:
             skipped.append(item.title or f"Canción {index + 1}")
     if not songs:
-        raise HTTPException(status_code=422, detail="No se encontraron acordes en ninguna canción. Pega cifrados o tablaturas con al menos dos acordes.")
+        raise HTTPException(
+            status_code=422, detail="No se encontraron acordes en ninguna canción. Pega cifrados o tablaturas con al menos dos acordes."
+        )
     return {**learn_profile(request.name.strip(), songs), "skipped": skipped}
 
 

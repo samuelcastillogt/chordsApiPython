@@ -5,7 +5,7 @@ from app.main import app
 from app.style.model import distribution, suggest
 from app.style.profile import learn_profile, numeral, realize, tokenize_song
 from app.style.sheet_parser import chord_line, parse_song
-from app.style.tab_reader import identify_chord, read_tab_block, TabNote
+from app.style.tab_reader import TabNote, identify_chord, read_tab_block
 
 client = TestClient(app)
 

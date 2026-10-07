@@ -65,13 +65,20 @@ def evidence(profile: dict, context: list[str], token: str) -> Evidence:
             count, songs = bucket["n"][token], bucket["s"].get(token, 1)
             path = " → ".join(numeral(item) for item in ctx)
             return Evidence(
-                [numeral(item) for item in ctx], count, songs,
+                [numeral(item) for item in ctx],
+                count,
+                songs,
                 f"Después de {path} la banda va a {numeral(token)} en {_songs(songs)} ({_times(count)}).",
             )
     usage = profile.get("usage", {}).get(token)
     total_songs = len(profile.get("songs", [])) or 1
     if usage:
-        return Evidence([], usage["count"], usage["songs"], f"{numeral(token)} es un acorde de la banda: aparece en {usage['songs']} de {_songs(total_songs)}.")
+        return Evidence(
+            [],
+            usage["count"],
+            usage["songs"],
+            f"{numeral(token)} es un acorde de la banda: aparece en {usage['songs']} de {_songs(total_songs)}.",
+        )
     return Evidence([], 0, 0, f"La banda no usa {numeral(token)}: lo propone solo el motor armónico.")
 
 
@@ -86,7 +93,7 @@ def phrase(profile: dict, context: list[str], length: int = 3, beam: int = 4) ->
             for token, p in sorted(options.items(), key=lambda item: -item[1])[:beam]:
                 if current and token == current[-1]:
                     continue
-                expanded.append((probability * p, tokens + [token]))
+                expanded.append((probability * p, [*tokens, token]))
         if not expanded:
             break
         beams = sorted(expanded, key=lambda item: -item[0])[:beam]
@@ -118,25 +125,27 @@ def suggest(profile: dict, history: list[ChordNode], key: Key, weight: float = 0
         probability = probabilities.get(token, 0.0)
         style_score = round(100 * probability / top, 1)
         proof = evidence(profile, context, token)
-        results.append({
-            "target": chord.id,
-            "score": round(weight * style_score + (1 - weight) * engine.total, 1),
-            "category": engine.category,
-            "breakdown": {
-                item.name: {"raw": item.raw_score, "weighted": round(item.weighted_score, 1), "detail": item.details}
-                for item in engine.breakdown
-            },
-            "engineScore": engine.total,
-            "style": {
-                "score": style_score,
-                "probability": round(probability, 4),
-                "numeral": numeral(token),
-                "context": proof.context,
-                "count": proof.count,
-                "songs": proof.songs,
-                "evidence": proof.text,
-            },
-        })
+        results.append(
+            {
+                "target": chord.id,
+                "score": round(weight * style_score + (1 - weight) * engine.total, 1),
+                "category": engine.category,
+                "breakdown": {
+                    item.name: {"raw": item.raw_score, "weighted": round(item.weighted_score, 1), "detail": item.details}
+                    for item in engine.breakdown
+                },
+                "engineScore": engine.total,
+                "style": {
+                    "score": style_score,
+                    "probability": round(probability, 4),
+                    "numeral": numeral(token),
+                    "context": proof.context,
+                    "count": proof.count,
+                    "songs": proof.songs,
+                    "evidence": proof.text,
+                },
+            }
+        )
     results.sort(key=lambda item: (-item["score"], item["target"]))
     # One suggestion per degree: F and Fmaj7 are the same move (♭VI), keep the best-scored colour.
     unique: dict[str, dict] = {}

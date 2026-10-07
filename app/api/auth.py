@@ -1,54 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+"""Account endpoints. Sign-up and sign-in happen in Firebase; the API only sees ID tokens."""
 
-from app.api.schemas import AuthRequest, TokenResponse, UserResponse
-from app.core.security import (
-    EMAIL_RE,
-    create_access_token,
-    get_current_user,
-    hash_password,
-    require_auth_enabled,
-    verify_password,
-)
-from app.db import get_session
-from app.models import User
+from fastapi import APIRouter, Depends, Response, status
+
+from app.api.schemas import UserResponse, UserUpdateRequest
+from app.core.security import get_current_user
+from app.repositories import Repository, UserRecord, get_repository
 
 router = APIRouter()
 
 
-def serialize_user(user: User) -> dict:
-    return {"id": user.id, "email": user.email, "displayName": user.display_name}
-
-
-def token_response(user: User) -> dict:
-    return {"accessToken": create_access_token(user.id), "user": serialize_user(user)}
-
-
-@router.post("/auth/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: AuthRequest, session: AsyncSession = Depends(get_session)):
-    require_auth_enabled()
-    email = request.email.strip().lower()
-    if not EMAIL_RE.match(email):
-        raise HTTPException(status_code=422, detail="Email inválido")
-    existing = await session.scalar(select(User).where(User.email == email))
-    if existing:
-        raise HTTPException(status_code=409, detail="User already exists")
-    user = User(email=email, display_name=(request.displayName or "").strip() or None, password_hash=hash_password(request.password))
-    session.add(user)
-    await session.commit()
-    return token_response(user)
-
-
-@router.post("/auth/login", response_model=TokenResponse)
-async def login(request: AuthRequest, session: AsyncSession = Depends(get_session)):
-    require_auth_enabled()
-    user = await session.scalar(select(User).where(User.email == request.email.strip().lower()))
-    if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return token_response(user)
+def serialize_user(user: UserRecord) -> dict:
+    return {"id": user.id, "email": user.email, "displayName": user.display_name, "photoUrl": user.photo_url}
 
 
 @router.get("/auth/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)):
+async def me(user: UserRecord = Depends(get_current_user)):
+    """The signed-in user; the first call after signing up creates the account."""
     return serialize_user(user)
+
+
+@router.patch("/auth/me", response_model=UserResponse)
+async def update_me(
+    request: UserUpdateRequest, user: UserRecord = Depends(get_current_user), repository: Repository = Depends(get_repository)
+):
+    if "displayName" in request.model_fields_set:
+        user.display_name = (request.displayName or "").strip() or None
+        await repository.save_user(user)
+    return serialize_user(user)
+
+
+@router.delete("/auth/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(user: UserRecord = Depends(get_current_user), repository: Repository = Depends(get_repository)):
+    """Deletes the user's data (progressions included). The Firebase account is deleted by the client."""
+    await repository.delete_user(user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

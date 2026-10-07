@@ -1,5 +1,6 @@
 import pytest
-from app.domain.chord import ChordNode, ChordType
+
+from app.domain.chord import ChordNode
 from app.engine.connection_engine import find_connections, score_connection
 
 

@@ -66,10 +66,19 @@ QUALITIES: dict[ChordType, Quality] = {
 }
 
 # Chords suggested as "next chord" moves; the rest are colours offered as substitutions.
-CORE_TYPES = frozenset({
-    ChordType.MAJOR, ChordType.MINOR, ChordType.DOM7, ChordType.MAJ7, ChordType.MIN7,
-    ChordType.DIM, ChordType.HALF_DIM7, ChordType.DIM7, ChordType.AUG,
-})
+CORE_TYPES = frozenset(
+    {
+        ChordType.MAJOR,
+        ChordType.MINOR,
+        ChordType.DOM7,
+        ChordType.MAJ7,
+        ChordType.MIN7,
+        ChordType.DIM,
+        ChordType.HALF_DIM7,
+        ChordType.DIM7,
+        ChordType.AUG,
+    }
+)
 
 NOTES = [Note.C, Note.CSHARP, Note.D, Note.DSHARP, Note.E, Note.F, Note.FSHARP, Note.G, Note.GSHARP, Note.A, Note.ASHARP, Note.B]
 NOTE_INDEX = {note: i for i, note in enumerate(NOTES)}
@@ -137,20 +146,50 @@ LATIN_TO_AMERICAN = {"DO": "C", "RE": "D", "MI": "E", "FA": "F", "SOL": "G", "LA
 NATURAL_INDEX = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 EXACT_SUFFIXES: dict[str, ChordType] = {
-    "": ChordType.MAJOR, "M": ChordType.MAJOR, "maj": ChordType.MAJOR, "major": ChordType.MAJOR,
-    "m": ChordType.MINOR, "min": ChordType.MINOR, "-": ChordType.MINOR, "minor": ChordType.MINOR,
-    "dim": ChordType.DIM, "°": ChordType.DIM, "o": ChordType.DIM,
-    "aug": ChordType.AUG, "+": ChordType.AUG, "#5": ChordType.AUG,
-    "7": ChordType.DOM7, "dom7": ChordType.DOM7,
-    "dim7": ChordType.DIM7, "°7": ChordType.DIM7, "o7": ChordType.DIM7,
-    "maj7": ChordType.MAJ7, "M7": ChordType.MAJ7, "Δ": ChordType.MAJ7, "Δ7": ChordType.MAJ7, "7M": ChordType.MAJ7, "ma7": ChordType.MAJ7,
-    "m7": ChordType.MIN7, "min7": ChordType.MIN7, "-7": ChordType.MIN7,
-    "m7b5": ChordType.HALF_DIM7, "ø": ChordType.HALF_DIM7, "ø7": ChordType.HALF_DIM7, "m7-5": ChordType.HALF_DIM7,
-    "sus2": ChordType.SUS2, "2": ChordType.SUS2,
-    "sus4": ChordType.SUS4, "sus": ChordType.SUS4, "4": ChordType.SUS4,
-    "add9": ChordType.ADD9, "add2": ChordType.ADD9,
-    "6": ChordType.SIX, "m6": ChordType.MIN6, "min6": ChordType.MIN6,
-    "9": ChordType.DOM9, "dom9": ChordType.DOM9,
+    "": ChordType.MAJOR,
+    "M": ChordType.MAJOR,
+    "maj": ChordType.MAJOR,
+    "major": ChordType.MAJOR,
+    "m": ChordType.MINOR,
+    "min": ChordType.MINOR,
+    "-": ChordType.MINOR,
+    "minor": ChordType.MINOR,
+    "dim": ChordType.DIM,
+    "°": ChordType.DIM,
+    "o": ChordType.DIM,
+    "aug": ChordType.AUG,
+    "+": ChordType.AUG,
+    "#5": ChordType.AUG,
+    "7": ChordType.DOM7,
+    "dom7": ChordType.DOM7,
+    "dim7": ChordType.DIM7,
+    "°7": ChordType.DIM7,
+    "o7": ChordType.DIM7,
+    "maj7": ChordType.MAJ7,
+    "M7": ChordType.MAJ7,
+    "Δ": ChordType.MAJ7,
+    "Δ7": ChordType.MAJ7,
+    "7M": ChordType.MAJ7,
+    "ma7": ChordType.MAJ7,
+    "m7": ChordType.MIN7,
+    "min7": ChordType.MIN7,
+    "-7": ChordType.MIN7,
+    "m7b5": ChordType.HALF_DIM7,
+    "ø": ChordType.HALF_DIM7,
+    "ø7": ChordType.HALF_DIM7,
+    "m7-5": ChordType.HALF_DIM7,
+    "sus2": ChordType.SUS2,
+    "2": ChordType.SUS2,
+    "sus4": ChordType.SUS4,
+    "sus": ChordType.SUS4,
+    "4": ChordType.SUS4,
+    "add9": ChordType.ADD9,
+    "add2": ChordType.ADD9,
+    "6": ChordType.SIX,
+    "m6": ChordType.MIN6,
+    "min6": ChordType.MIN6,
+    "9": ChordType.DOM9,
+    "dom9": ChordType.DOM9,
     "5": ChordType.POWER,
 }
 
@@ -160,16 +199,22 @@ APPROXIMATE_PREFIXES: list[tuple[str, ChordType]] = [
     ("mmaj7", ChordType.MINOR),
     ("maj", ChordType.MAJ7),
     ("madd", ChordType.MINOR),
-    ("m9", ChordType.MIN7), ("m11", ChordType.MIN7), ("m13", ChordType.MIN7), ("m7", ChordType.MIN7),
+    ("m9", ChordType.MIN7),
+    ("m11", ChordType.MIN7),
+    ("m13", ChordType.MIN7),
+    ("m7", ChordType.MIN7),
     ("m", ChordType.MINOR),
     ("dim", ChordType.DIM7),
     ("7sus", ChordType.DOM7),
     ("sus", ChordType.SUS4),
     ("add", ChordType.ADD9),
     ("6", ChordType.SIX),
-    ("11", ChordType.DOM9), ("13", ChordType.DOM9), ("9", ChordType.DOM9),
+    ("11", ChordType.DOM9),
+    ("13", ChordType.DOM9),
+    ("9", ChordType.DOM9),
     ("7", ChordType.DOM7),
-    ("aug", ChordType.AUG), ("+", ChordType.AUG),
+    ("aug", ChordType.AUG),
+    ("+", ChordType.AUG),
 ]
 
 
@@ -197,7 +242,7 @@ def _parse_root(text: str) -> tuple[Note, str] | None:
         letter = match.group(1).upper()
     accidental = match.group(2)
     offset = 1 if accidental in ("#", "♯") else -1 if accidental in ("b", "♭") else 0
-    return NOTES[(NATURAL_INDEX[letter] + offset) % 12], text[len(match.group(0)):]
+    return NOTES[(NATURAL_INDEX[letter] + offset) % 12], text[len(match.group(0)) :]
 
 
 def parse_chord_symbol(symbol: str, catalog: dict[str, ChordNode]) -> ParsedChord:

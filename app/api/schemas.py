@@ -183,22 +183,15 @@ class ExploreResponse(BaseModel):
     total: int
 
 
-class AuthRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=320)
-    password: str = Field(min_length=8, max_length=128)
-    displayName: str | None = Field(default=None, max_length=80)
-
-
 class UserResponse(BaseModel):
     id: str
-    email: str
+    email: str | None
     displayName: str | None
+    photoUrl: str | None = None
 
 
-class TokenResponse(BaseModel):
-    accessToken: str
-    tokenType: str = "bearer"
-    user: UserResponse
+class UserUpdateRequest(BaseModel):
+    displayName: str | None = Field(default=None, max_length=80)
 
 
 class StyleParseRequest(BaseModel):

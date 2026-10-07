@@ -32,12 +32,14 @@ async def parse_chords(request: ParseRequest):
     for symbol in request.symbols:
         try:
             parsed = parse(symbol)
-            results.append({
-                "input": symbol,
-                "chord": parsed.chord.id,
-                "bass": parsed.bass.value if parsed.bass else None,
-                "approximated": parsed.approximated,
-            })
+            results.append(
+                {
+                    "input": symbol,
+                    "chord": parsed.chord.id,
+                    "bass": parsed.bass.value if parsed.bass else None,
+                    "approximated": parsed.approximated,
+                }
+            )
         except ChordParseError as error:
             results.append({"input": symbol, "chord": None, "error": str(error)})
     return {"results": results}

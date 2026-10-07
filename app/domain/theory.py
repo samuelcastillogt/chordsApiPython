@@ -1,15 +1,16 @@
 """Tonal analysis: keys, roman numerals, harmonic functions and substitutions."""
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 from app.domain.chord import (
+    FLAT_NAMES,
     NOTE_INDEX,
     NOTES,
+    QUALITIES,
     ChordNode,
     ChordType,
-    FLAT_NAMES,
     Note,
-    QUALITIES,
     _parse_root,
 )
 
@@ -31,10 +32,22 @@ SPANISH_NAMES = ["Do", "Do#", "Re", "Mib", "Mi", "Fa", "Fa#", "Sol", "Lab", "La"
 FUNCTION_LABELS = {"T": "tónica", "SD": "subdominante", "D": "dominante"}
 
 NUMERAL_SUFFIX = {
-    ChordType.MAJOR: "", ChordType.MINOR: "", ChordType.DIM: "°", ChordType.AUG: "+",
-    ChordType.DOM7: "7", ChordType.DIM7: "°7", ChordType.MAJ7: "maj7", ChordType.MIN7: "7",
-    ChordType.HALF_DIM7: "ø7", ChordType.SUS2: "sus2", ChordType.SUS4: "sus4", ChordType.ADD9: "add9",
-    ChordType.SIX: "6", ChordType.MIN6: "6", ChordType.DOM9: "9", ChordType.POWER: "5",
+    ChordType.MAJOR: "",
+    ChordType.MINOR: "",
+    ChordType.DIM: "°",
+    ChordType.AUG: "+",
+    ChordType.DOM7: "7",
+    ChordType.DIM7: "°7",
+    ChordType.MAJ7: "maj7",
+    ChordType.MIN7: "7",
+    ChordType.HALF_DIM7: "ø7",
+    ChordType.SUS2: "sus2",
+    ChordType.SUS4: "sus4",
+    ChordType.ADD9: "add9",
+    ChordType.SIX: "6",
+    ChordType.MIN6: "6",
+    ChordType.DOM9: "9",
+    ChordType.POWER: "5",
 }
 
 
@@ -99,7 +112,7 @@ def _numeral(chord: ChordNode, key: Key) -> str:
     degree = key.degree(chord.root)
     numeral = DEGREE_NAMES[key.mode][degree]
     if chord.family in ("minor", "diminished"):
-        numeral = numeral[:-len(numeral.lstrip("b#"))] + numeral.lstrip("b#").lower()
+        numeral = numeral[: -len(numeral.lstrip("b#"))] + numeral.lstrip("b#").lower()
     return numeral + NUMERAL_SUFFIX[chord.chord_type]
 
 
@@ -142,7 +155,10 @@ def analyze_chord(chord: ChordNode, key: Key) -> ChordAnalysis:
         if target and target not in ("I", "i"):
             secondary = f"V{'7' if chord.family == 'dominant' else ''}/{target}"
             return ChordAnalysis(
-                chord, secondary, "D", "secondary_dominant",
+                chord,
+                secondary,
+                "D",
+                "secondary_dominant",
                 f"{secondary}: dominante secundaria, crea tensión que resuelve en {target}.",
             )
 
@@ -150,7 +166,10 @@ def analyze_chord(chord: ChordNode, key: Key) -> ChordAnalysis:
     if is_diatonic(chord, parallel):
         function = FUNCTIONS[parallel.mode].get(degree)
         return ChordAnalysis(
-            chord, numeral, function, "borrowed",
+            chord,
+            numeral,
+            function,
+            "borrowed",
             f"{numeral}: acorde prestado de {parallel.label}; aporta un color {'oscuro' if parallel.mode == 'minor' else 'luminoso'}.",
         )
 
@@ -173,7 +192,13 @@ def detect_key(chords: list[ChordNode]) -> KeyGuess:
     for key in ALL_KEYS:
         score = sum(weights[analyze_chord(chord, key).role] for chord in chords) / len(chords)
         tonic_type = ChordType.MAJOR if key.mode == "major" else ChordType.MINOR
-        tonic_like = {tonic_type, ChordType.MAJ7 if key.mode == "major" else ChordType.MIN7, ChordType.SIX if key.mode == "major" else ChordType.MIN6, ChordType.ADD9 if key.mode == "major" else ChordType.MINOR, ChordType.POWER}
+        tonic_like = {
+            tonic_type,
+            ChordType.MAJ7 if key.mode == "major" else ChordType.MIN7,
+            ChordType.SIX if key.mode == "major" else ChordType.MIN6,
+            ChordType.ADD9 if key.mode == "major" else ChordType.MINOR,
+            ChordType.POWER,
+        }
         if chords[0].root == key.tonic and chords[0].chord_type in tonic_like:
             score += 0.15
         if chords[-1].root == key.tonic and chords[-1].chord_type in tonic_like:
@@ -182,7 +207,7 @@ def detect_key(chords: list[ChordNode]) -> KeyGuess:
         blues_degrees = {key.degree(chord.root) for chord in chords} <= {0, 5, 7}
         if key.mode == "major" and dominant_count >= 3 and blues_degrees and chords[0].root == key.tonic:
             score += 0.5  # Blues: I7, IV7 and V7 are all dominant chords.
-        for previous, current in zip(chords, chords[1:]):
+        for previous, current in pairwise(chords):
             if key.degree(previous.root) == 7 and previous.family in ("major", "dominant") and current.root == key.tonic:
                 score += 0.1
                 break

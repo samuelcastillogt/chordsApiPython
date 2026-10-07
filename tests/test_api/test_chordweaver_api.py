@@ -1,17 +1,14 @@
-from uuid import uuid4
-
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.firebase_fakes import auth_headers
 
 client = TestClient(app)
 
 
-def register(email: str | None = None) -> dict[str, str]:
-    email = email or f"user-{uuid4().hex[:8]}@example.com"
-    response = client.post("/api/v1/auth/register", json={"email": email, "password": "strong-password"})
-    assert response.status_code == 201
-    return {"Authorization": f"Bearer {response.json()['accessToken']}"}
+def register() -> dict[str, str]:
+    """Headers of a brand-new Firebase user (the API creates it on its first request)."""
+    return auth_headers()
 
 
 def test_openapi_exposes_swagger_contract():
@@ -25,8 +22,8 @@ def test_openapi_exposes_swagger_contract():
         "/api/v1/explore",
         "/api/v1/analyze",
         "/api/v1/tablature",
-        "/api/v1/auth/register",
         "/api/v1/auth/me",
+        "/api/v1/style/learn",
         "/api/v1/progressions/{progression_id}",
     ):
         assert path in paths
@@ -179,9 +176,7 @@ def test_progressions_crud_roundtrip():
 def test_progressions_are_private_unless_shared():
     owner = register()
     other = register()
-    progression = client.post(
-        "/api/v1/progressions", json={"name": "Mía", "chords": ["Am", "F"]}, headers=owner
-    ).json()
+    progression = client.post("/api/v1/progressions", json={"name": "Mía", "chords": ["Am", "F"]}, headers=owner).json()
     url = f"/api/v1/progressions/{progression['id']}"
 
     assert client.get(url).status_code == 404
@@ -196,39 +191,10 @@ def test_progressions_are_private_unless_shared():
 
 
 def test_progression_rejects_unknown_chord():
-    response = client.post(
-        "/api/v1/progressions", json={"name": "Invalid", "chords": ["C", "H"]}, headers=register()
-    )
+    response = client.post("/api/v1/progressions", json={"name": "Invalid", "chords": ["C", "H"]}, headers=register())
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Unknown chord: H"
-
-
-def test_auth_register_login_and_me():
-    email = f"auth-{uuid4().hex[:8]}@example.com"
-    register_response = client.post(
-        "/api/v1/auth/register", json={"email": email, "password": "strong-password", "displayName": "Gus"}
-    )
-    assert register_response.status_code == 201
-    assert register_response.json()["user"]["displayName"] == "Gus"
-
-    duplicate = client.post("/api/v1/auth/register", json={"email": email.upper(), "password": "strong-password"})
-    assert duplicate.status_code == 409
-
-    login_response = client.post("/api/v1/auth/login", json={"email": email, "password": "strong-password"})
-    assert login_response.status_code == 200
-    token = login_response.json()["accessToken"]
-
-    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
-    assert me.json()["email"] == email
-
-
-def test_auth_login_rejects_invalid_credentials():
-    response = client.post(
-        "/api/v1/auth/login", json={"email": "missing@example.com", "password": "strong-password"}
-    )
-
-    assert response.status_code == 401
 
 
 def test_invalid_token_is_rejected():
@@ -238,4 +204,5 @@ def test_invalid_token_is_rejected():
 
 
 def test_health_reports_accounts_available():
-    assert client.get("/health").json() == {"status": "ok", "accounts": True}
+    body = client.get("/health").json()
+    assert body["status"] == "ok" and body["accounts"] is True

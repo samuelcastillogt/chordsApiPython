@@ -68,7 +68,8 @@ async def explore_next_chords(request: ExploreRequest):
                 "explanation": next(
                     (criterion.details for criterion in item.breakdown if criterion.name == "transformation"),
                     "",
-                ) + f" · conexión {item.category} ({item.total}).",
+                )
+                + f" · conexión {item.category} ({item.total}).",
             }
             for item in connections
         ],

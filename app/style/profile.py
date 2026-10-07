@@ -20,23 +20,43 @@ PATTERN_LENGTHS = range(3, 7)
 MAX_PATTERNS = 12
 
 QUALITY_OF: dict[ChordType, str] = {
-    ChordType.MAJOR: "maj", ChordType.MAJ7: "maj", ChordType.ADD9: "maj", ChordType.SIX: "maj",
-    ChordType.MINOR: "min", ChordType.MIN7: "min", ChordType.MIN6: "min",
-    ChordType.DOM7: "dom", ChordType.DOM9: "dom",
-    ChordType.DIM: "dim", ChordType.DIM7: "dim", ChordType.HALF_DIM7: "dim",
+    ChordType.MAJOR: "maj",
+    ChordType.MAJ7: "maj",
+    ChordType.ADD9: "maj",
+    ChordType.SIX: "maj",
+    ChordType.MINOR: "min",
+    ChordType.MIN7: "min",
+    ChordType.MIN6: "min",
+    ChordType.DOM7: "dom",
+    ChordType.DOM9: "dom",
+    ChordType.DIM: "dim",
+    ChordType.DIM7: "dim",
+    ChordType.HALF_DIM7: "dim",
     ChordType.AUG: "aug",
-    ChordType.SUS2: "sus", ChordType.SUS4: "sus",
+    ChordType.SUS2: "sus",
+    ChordType.SUS4: "sus",
     ChordType.POWER: "pow",
 }
 DEFAULT_TYPE = {
-    "maj": ChordType.MAJOR, "min": ChordType.MINOR, "dom": ChordType.DOM7, "dim": ChordType.DIM,
-    "aug": ChordType.AUG, "sus": ChordType.SUS4, "pow": ChordType.POWER,
+    "maj": ChordType.MAJOR,
+    "min": ChordType.MINOR,
+    "dom": ChordType.DOM7,
+    "dim": ChordType.DIM,
+    "aug": ChordType.AUG,
+    "sus": ChordType.SUS4,
+    "pow": ChordType.POWER,
 }
 DEGREES = ["I", "♭II", "II", "♭III", "III", "IV", "♯IV", "V", "♭VI", "VI", "♭VII", "VII"]
 QUALITY_SUFFIX = {"maj": "", "min": "", "dom": "7", "dim": "°", "aug": "+", "sus": "sus", "pow": "5"}
 COLOR_LABELS = {
-    ChordType.MAJ7: "maj7", ChordType.ADD9: "add9", ChordType.SIX: "6", ChordType.MIN7: "m7",
-    ChordType.MIN6: "m6", ChordType.DOM9: "9", ChordType.SUS2: "sus2", ChordType.SUS4: "sus4",
+    ChordType.MAJ7: "maj7",
+    ChordType.ADD9: "add9",
+    ChordType.SIX: "6",
+    ChordType.MIN7: "m7",
+    ChordType.MIN6: "m6",
+    ChordType.DOM9: "9",
+    ChordType.SUS2: "sus2",
+    ChordType.SUS4: "sus4",
 }
 
 
@@ -89,15 +109,13 @@ def _canonical_rotation(pattern: tuple[str, ...]) -> tuple[str, ...]:
 
 def _contains(longer: tuple[str, ...], shorter: tuple[str, ...]) -> bool:
     size = len(shorter)
-    return any(longer[i:i + size] == shorter for i in range(len(longer) - size + 1))
+    return any(longer[i : i + size] == shorter for i in range(len(longer) - size + 1))
 
 
 def _shifted(listed: tuple[str, ...], gram: tuple[str, ...]) -> bool:
     """True when ``gram`` overlaps ``listed`` in all but one chord at either end."""
     overlap = len(gram) - 1
-    return overlap >= 2 and len(listed) >= len(gram) and (
-        _contains(listed, gram[1:]) or _contains(listed, gram[:-1])
-    )
+    return overlap >= 2 and len(listed) >= len(gram) and (_contains(listed, gram[1:]) or _contains(listed, gram[:-1]))
 
 
 def mine_patterns(songs: list[SongTokens]) -> list[dict]:
@@ -112,7 +130,7 @@ def mine_patterns(songs: list[SongTokens]) -> list[dict]:
     for index, song in enumerate(songs):
         for size in PATTERN_LENGTHS:
             for i in range(len(song.tokens) - size + 1):
-                gram = tuple(song.tokens[i:i + size])
+                gram = tuple(song.tokens[i : i + size])
                 if len(set(gram)) < 2:
                     continue
                 counts[gram] += 1
@@ -131,10 +149,13 @@ def mine_patterns(songs: list[SongTokens]) -> list[dict]:
     candidates = list(by_rotation.values())
 
     kept = [
-        gram for gram in candidates
+        gram
+        for gram in candidates
         if not any(
-            len(other) > len(gram) and _contains(other, gram)
-            and len(song_sets[other]) >= len(song_sets[gram]) and counts[other] * 4 >= counts[gram] * 3
+            len(other) > len(gram)
+            and _contains(other, gram)
+            and len(song_sets[other]) >= len(song_sets[gram])
+            and counts[other] * 4 >= counts[gram] * 3
             for other in candidates
         )
     ]
@@ -156,13 +177,15 @@ def mine_patterns(songs: list[SongTokens]) -> list[dict]:
             loops.append(gram)
         if len(patterns) == MAX_PATTERNS:
             break
-        patterns.append({
-            "tokens": list(gram),
-            "numerals": [numeral(token) for token in gram],
-            "count": counts[gram],
-            "songs": len(song_sets[gram]),
-            "loop": loop,
-        })
+        patterns.append(
+            {
+                "tokens": list(gram),
+                "numerals": [numeral(token) for token in gram],
+                "count": counts[gram],
+                "songs": len(song_sets[gram]),
+                "loop": loop,
+            }
+        )
     return patterns
 
 
@@ -188,7 +211,8 @@ def describe(songs: list[SongTokens], usage: dict[str, dict], qualities: Counter
 
     signature = sorted(
         (
-            (data["songs"], token) for token, data in usage.items()
+            (data["songs"], token)
+            for token, data in usage.items()
             if data["role"] in ("borrowed", "chromatic", "secondary_dominant") and data["songs"] * 10 >= total_songs * 3
         ),
         reverse=True,
@@ -229,7 +253,7 @@ def learn_profile(name: str, songs: list[SongTokens]) -> dict:
     for index, song in enumerate(songs):
         starts[song.tokens[0]] += 1
         endings[_ctx(song.tokens[-2:])] += 1
-        for chord, token in zip(song.chords, song.tokens):
+        for chord, token in zip(song.chords, song.tokens, strict=True):
             unigrams[token] += 1
             qualities[token.split(":")[1]] += 1
             colors_by_token.setdefault(token, Counter())[chord.chord_type.value] += 1
@@ -246,7 +270,7 @@ def learn_profile(name: str, songs: list[SongTokens]) -> dict:
             for order in range(1, MAX_ORDER + 1):
                 if position - order < 0:
                     break
-                context = _ctx(song.tokens[position - order:position])
+                context = _ctx(song.tokens[position - order : position])
                 bucket = transitions.setdefault(context, {"n": {}, "s": {}})
                 bucket["n"][following] = bucket["n"].get(following, 0) + 1
                 key = f"{context}>{following}"

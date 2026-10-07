@@ -1,6 +1,6 @@
+from dataclasses import replace
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import (
     ProgressionCreateRequest,
@@ -9,10 +9,9 @@ from app.api.schemas import (
     ProgressionUpdateRequest,
 )
 from app.core.security import get_current_user, get_optional_user
-from app.db import get_session
 from app.domain.catalog import find_chord
 from app.domain.theory import parse_key
-from app.models import Progression, User
+from app.repositories import ProgressionRecord, Repository, UserRecord, get_repository
 
 router = APIRouter()
 
@@ -30,7 +29,7 @@ def validate_tonality(tonality: str | None) -> str | None:
     return key.id
 
 
-def serialize(progression: Progression, user: User | None) -> dict:
+def serialize(progression: ProgressionRecord, user: UserRecord | None) -> dict:
     return {
         "id": progression.id,
         "name": progression.name,
@@ -44,49 +43,45 @@ def serialize(progression: Progression, user: User | None) -> dict:
     }
 
 
-async def owned_progression(progression_id: str, user: User, session: AsyncSession) -> Progression:
-    progression = await session.get(Progression, progression_id)
+async def owned_progression(progression_id: str, user: UserRecord, repository: Repository) -> ProgressionRecord:
+    progression = await repository.get_progression(progression_id)
     if not progression or progression.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Progression not found")
     return progression
 
 
 @router.get("/progressions", response_model=ProgressionListResponse)
-async def list_progressions(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
-    rows = await session.scalars(
-        select(Progression).where(Progression.owner_id == user.id).order_by(Progression.updated_at.desc())
-    )
-    progressions = [serialize(row, user) for row in rows]
+async def list_progressions(user: UserRecord = Depends(get_current_user), repository: Repository = Depends(get_repository)):
+    progressions = [serialize(item, user) for item in await repository.list_progressions(user.id)]
     return {"progressions": progressions, "total": len(progressions)}
 
 
 @router.post("/progressions", response_model=ProgressionResponse, status_code=status.HTTP_201_CREATED)
 async def create_progression(
     request: ProgressionCreateRequest,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    user: UserRecord = Depends(get_current_user),
+    repository: Repository = Depends(get_repository),
 ):
-    progression = Progression(
-        owner_id=user.id,
-        name=request.name.strip(),
-        chords=validate_chords(request.chords),
-        tonality=validate_tonality(request.tonality),
-        is_public=request.isPublic,
-        source=request.source,
+    progression = await repository.create_progression(
+        ProgressionRecord(
+            owner_id=user.id,
+            name=request.name.strip(),
+            chords=validate_chords(request.chords),
+            tonality=validate_tonality(request.tonality),
+            is_public=request.isPublic,
+            source=request.source,
+        )
     )
-    session.add(progression)
-    await session.commit()
-    await session.refresh(progression)
     return serialize(progression, user)
 
 
 @router.get("/progressions/{progression_id}", response_model=ProgressionResponse)
 async def get_progression(
     progression_id: str,
-    user: User | None = Depends(get_optional_user),
-    session: AsyncSession = Depends(get_session),
+    user: UserRecord | None = Depends(get_optional_user),
+    repository: Repository = Depends(get_repository),
 ):
-    progression = await session.get(Progression, progression_id)
+    progression = await repository.get_progression(progression_id)
     is_owner = progression is not None and user is not None and progression.owner_id == user.id
     if not progression or not (progression.is_public or is_owner):
         raise HTTPException(status_code=404, detail="Progression not found")
@@ -97,30 +92,29 @@ async def get_progression(
 async def update_progression(
     progression_id: str,
     request: ProgressionUpdateRequest,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    user: UserRecord = Depends(get_current_user),
+    repository: Repository = Depends(get_repository),
 ):
-    progression = await owned_progression(progression_id, user, session)
+    progression = await owned_progression(progression_id, user, repository)
+    changes: dict = {}
     if request.name is not None:
-        progression.name = request.name.strip()
+        changes["name"] = request.name.strip()
     if request.chords is not None:
-        progression.chords = validate_chords(request.chords)
+        changes["chords"] = validate_chords(request.chords)
     if request.tonality is not None:
-        progression.tonality = validate_tonality(request.tonality)
+        changes["tonality"] = validate_tonality(request.tonality)
     if request.isPublic is not None:
-        progression.is_public = request.isPublic
-    await session.commit()
-    await session.refresh(progression)
-    return serialize(progression, user)
+        changes["is_public"] = request.isPublic
+    updated = await repository.update_progression(replace(progression, **changes))
+    return serialize(updated, user)
 
 
 @router.delete("/progressions/{progression_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_progression(
     progression_id: str,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    user: UserRecord = Depends(get_current_user),
+    repository: Repository = Depends(get_repository),
 ):
-    progression = await owned_progression(progression_id, user, session)
-    await session.delete(progression)
-    await session.commit()
+    await owned_progression(progression_id, user, repository)
+    await repository.delete_progression(progression_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

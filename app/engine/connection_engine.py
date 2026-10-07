@@ -43,11 +43,7 @@ def find_connections(
     With ``distinct`` only the best voicing per root and chord family is kept,
     so C does not recommend C7, Cmaj7 and C6 as if they were different moves.
     """
-    scored = [
-        score_connection(current, candidate, tonality)
-        for candidate in all_chords
-        if candidate.id != current.id
-    ]
+    scored = [score_connection(current, candidate, tonality) for candidate in all_chords if candidate.id != current.id]
     scored.sort(key=lambda item: item.total, reverse=True)
 
     results: list[ConnectionScore] = []

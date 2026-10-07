@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.schemas import TablatureRequest, TablatureResponse
 from app.domain.catalog import find_chord
-from app.domain.chord import ChordNode, NOTES, Note
+from app.domain.chord import NOTES, ChordNode, Note
 
 router = APIRouter()
 

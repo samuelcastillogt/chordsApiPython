@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// ChordWeaver's collections are read and written only by the API, with a service account
+// (which bypasses security rules), so browsers and apps get no direct access.
+//
+// SHARED PROJECT: deploying this file REPLACES every rule of the Firebase project. If the
+// project already serves another app, do not deploy it: copy the two `match` blocks below
+// into that project's existing rules instead, and check that no broader rule such as
+// `match /{document=**}` grants access to them (an allow in any matching rule wins).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /chordweaver_users/{document=**} {
+      allow read, write: if false;
+    }
+    match /chordweaver_progressions/{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

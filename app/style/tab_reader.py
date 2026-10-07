@@ -8,11 +8,14 @@ as one arpeggiated chord. Each group of notes is matched against the chord catal
 
 import re
 from dataclasses import dataclass
+from itertools import pairwise
 
 from app.domain.catalog import ALL_CHORDS
 from app.domain.chord import NOTE_INDEX, ChordNode, ChordType, _parse_root
 
-TAB_LINE_RE = re.compile(r"^\s*(?P<label>[A-Ga-g][#b]?)?\s*(?P<sep>[|:])?(?P<body>[-0-9xXhpbrs/\\~|().<>^*=v ]*-[-0-9xXhpbrs/\\~|().<>^*=v ]*)$")
+TAB_LINE_RE = re.compile(
+    r"^\s*(?P<label>[A-Ga-g][#b]?)?\s*(?P<sep>[|:])?(?P<body>[-0-9xXhpbrs/\\~|().<>^*=v ]*-[-0-9xXhpbrs/\\~|().<>^*=v ]*)$"
+)
 STANDARD_GUITAR = ["E", "B", "G", "D", "A", "E"]
 MIN_DASHES = 4
 STACK_SIZE = 3
@@ -21,8 +24,18 @@ UNBARRED_WIDTH = 16
 
 # Chords a tab can be recognised as: the triad and seventh vocabulary plus power and sus chords.
 RECOGNISABLE = {
-    ChordType.MAJOR, ChordType.MINOR, ChordType.DIM, ChordType.AUG, ChordType.DOM7, ChordType.MAJ7,
-    ChordType.MIN7, ChordType.HALF_DIM7, ChordType.DIM7, ChordType.SUS2, ChordType.SUS4, ChordType.POWER,
+    ChordType.MAJOR,
+    ChordType.MINOR,
+    ChordType.DIM,
+    ChordType.AUG,
+    ChordType.DOM7,
+    ChordType.MAJ7,
+    ChordType.MIN7,
+    ChordType.HALF_DIM7,
+    ChordType.DIM7,
+    ChordType.SUS2,
+    ChordType.SUS4,
+    ChordType.POWER,
 }
 CANDIDATES = [chord for chord in ALL_CHORDS if chord.chord_type in RECOGNISABLE]
 
@@ -66,7 +79,8 @@ def _read_block(lines: list[str]) -> tuple[list[str], list[int]]:
     bodies: list[str] = []
     for line in lines:
         match = TAB_LINE_RE.match(line.rstrip())
-        assert match
+        if match is None:
+            raise ValueError(f"Not a tab line: {line!r}")
         labels.append(match.group("label"))
         bodies.append(match.group("body"))
     return bodies, _open_strings(labels)
@@ -102,7 +116,7 @@ def _segments(bodies: list[str], notes: list[TabNote]) -> list[list[TabNote]]:
     edges = bars if bars else list(range(0, width, UNBARRED_WIDTH))
     edges = sorted(set([0, *edges, width + 1]))
     segments = []
-    for start, end in zip(edges, edges[1:]):
+    for start, end in pairwise(edges):
         segment = sorted((note for note in notes if start <= note.column < end), key=lambda note: note.column)
         if segment:
             segments.append(segment)
@@ -150,9 +164,9 @@ def _segment_chords(segment: list[TabNote]) -> list[ChordNode]:
 
     # Each stack owns the single notes that ring after it (until the next stack).
     groups: list[list[TabNote]] = []
-    boundaries = sorted(stacks) + [10**9]
+    boundaries = [*sorted(stacks), 10**9]
     leading = [note for note in segment if note.column < boundaries[0]]
-    for start, end in zip(boundaries, boundaries[1:]):
+    for start, end in pairwise(boundaries):
         groups.append([note for note in segment if start <= note.column < end])
     if leading and groups:
         groups[0] = leading + groups[0]

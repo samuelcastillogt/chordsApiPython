@@ -1,0 +1,40 @@
+[project]
+name = "chordweaver-api"
+version = "0.3.0"
+description = "ChordWeaver API: explains why a chord progression works and suggests what comes next."
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "SIM", "RUF"]
+ignore = [
+    "E501",    # Long lines are left to the formatter.
+    "RUF001",  # Spanish text and music symbols (♭, ♯, →) are intentional.
+    "RUF002",
+    "RUF003",
+    "B008",    # FastAPI's Depends() in defaults is the documented pattern.
+    "UP042",   # Note/ChordType stay (str, Enum): StrEnum would change str() of members.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/__init__.py"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true

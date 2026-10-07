@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 from fastapi import APIRouter, HTTPException
 
 from app.api.explore import serialize_connection
@@ -30,20 +32,22 @@ async def analyze_progression(request: AnalyzeRequest):
     degrees = []
     for item in parsed:
         result = analyze_chord(item.chord, key)
-        degrees.append({
-            "input": item.input,
-            "chord": item.chord.id,
-            "numeral": result.numeral,
-            "function": result.function,
-            "role": result.role,
-            "explanation": result.explanation,
-            "approximated": item.approximated,
-            "substitutions": [vars(sub) for sub in suggest_substitutions(item.chord, key, BY_ID)],
-        })
+        degrees.append(
+            {
+                "input": item.input,
+                "chord": item.chord.id,
+                "numeral": result.numeral,
+                "function": result.function,
+                "role": result.role,
+                "explanation": result.explanation,
+                "approximated": item.approximated,
+                "substitutions": [vars(sub) for sub in suggest_substitutions(item.chord, key, BY_ID)],
+            }
+        )
 
     connections = []
     tension_curve = []
-    for source, target in zip(chords, chords[1:]):
+    for source, target in pairwise(chords):
         connection = score_connection(source, target, tonality)
         connections.append({"source": source.id, **serialize_connection(connection)})
         tension_curve.append({"from": source.id, "to": target.id, "score": connection.total, "category": connection.category})

@@ -1,39 +1,40 @@
+"""Application settings, read from environment variables (and `.env` in development)."""
+
 import os
-from typing import Any
+from typing import Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-INSECURE_SECRET = "change-me-in-production"
+DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://samuelcastillogt.github.io"
 
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite+aiosqlite:///./chordweaver.db"
-    secret_key: str = INSECURE_SECRET
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24 * 7
-    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,https://samuelcastillogt.github.io"
-    environment: str = "development"
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    @field_validator("access_token_expire_minutes", mode="before")
-    @classmethod
-    def use_default_for_empty_int(cls, value: Any) -> Any:
-        if value == "":
-            return 60 * 24 * 7
-        return value
+    environment: Literal["development", "test", "production"] = "development"
+    log_level: str = "INFO"
 
-    @field_validator("database_url", mode="after")
+    # Firebase Authentication: the project whose ID tokens the API accepts.
+    # Empty disables accounts (analysis endpoints keep working).
+    firebase_project_id: str = ""
+    # Firestore credentials: a service account key, as JSON or base64-encoded JSON. Empty uses
+    # Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS, Google Cloud) or the
+    # emulator when FIRESTORE_EMULATOR_HOST is set.
+    firebase_service_account: str = ""
+    firestore_database: str = "(default)"
+    # Prefix of this app's collections, so it can share a Firebase project with other apps.
+    firestore_collection_prefix: str = "chordweaver_"
+    # host:port of the Firebase Auth emulator (e.g. 127.0.0.1:9099). Its tokens are unsigned,
+    # so it is honoured only outside production.
+    firebase_auth_emulator_host: str = ""
+
+    cors_origins: str = DEFAULT_CORS_ORIGINS
+
+    @field_validator("firebase_project_id", mode="after")
     @classmethod
-    def normalize_database_url(cls, value: str) -> str:
-        # Hosted Postgres providers hand out postgres:// URLs; SQLAlchemy async needs asyncpg.
-        if value.startswith("postgres://"):
-            value = "postgresql+asyncpg://" + value[len("postgres://"):]
-        elif value.startswith("postgresql://"):
-            value = "postgresql+asyncpg://" + value[len("postgresql://"):]
-        # Serverless filesystems are read-only except /tmp (data there is ephemeral).
-        if value.startswith("sqlite+aiosqlite:///./") and os.environ.get("VERCEL"):
-            value = "sqlite+aiosqlite:////tmp/" + value[len("sqlite+aiosqlite:///./"):]
-        return value
+    def strip_project_id(cls, value: str) -> str:
+        return value.strip()
 
     @property
     def is_production(self) -> bool:
@@ -41,14 +42,16 @@ class Settings(BaseSettings):
 
     @property
     def auth_enabled(self) -> bool:
-        """Accounts are disabled in production until a real secret is configured."""
-        return not (self.is_production and self.secret_key == INSECURE_SECRET)
+        """Accounts need a Firebase project to verify sign-in tokens against."""
+        return bool(self.firebase_project_id)
+
+    @property
+    def uses_auth_emulator(self) -> bool:
+        return bool(self.firebase_auth_emulator_host) and not self.is_production
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
-
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

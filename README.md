@@ -5,43 +5,80 @@ Backend FastAPI de ChordWeaver (Tejedor de Acordes). No es un cancionero: recibe
 ## Arranque rápido
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-cp .env.example .env
-uvicorn app.main:app --reload
+make install        # crea .venv, instala dependencias y copia .env.example a .env
+make dev            # http://localhost:8000
 ```
 
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
-- Salud: `http://localhost:8000/health` → `{"status": "ok", "accounts": true}`
+- Salud: `http://localhost:8000/health` → `{"status": "ok", "accounts": true, "version": "0.3.0"}`
 
-Con Docker (API + PostgreSQL):
+Con Docker:
 
 ```bash
-docker compose up --build
+make docker   # lee FIREBASE_PROJECT_ID y FIREBASE_SERVICE_ACCOUNT de tu shell o de .env
 ```
+
+`make help` lista todas las tareas: `test`, `lint`, `format` y `check` (lo mismo que la CI).
 
 ## Configuración
 
+Todas las variables están documentadas en [`.env.example`](.env.example).
+
 | Variable | Por defecto | Notas |
 | --- | --- | --- |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./chordweaver.db` | En producción usa PostgreSQL. Las URLs `postgres://` y `postgresql://` se convierten solas a `postgresql+asyncpg://`. |
-| `SECRET_KEY` | `change-me-in-production` | **Obligatoria en producción.** Con el valor por defecto en Vercel/producción las cuentas quedan deshabilitadas (`/health` devuelve `accounts: false`) y los endpoints de cuentas y progresiones responden 503. |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `10080` (7 días) | Vida del JWT. |
+| `ENVIRONMENT` | `development` | `development`, `test` o `production`. |
+| `LOG_LEVEL` | `INFO` | Nivel de logging. |
+| `FIREBASE_PROJECT_ID` | vacío | **Obligatoria para cuentas.** ID del proyecto de Firebase: verifica los tokens y abre Firestore. Vacía: cuentas y progresiones responden 503 y `/health` devuelve `accounts: false`. |
+| `FIREBASE_SERVICE_ACCOUNT` | vacío | **Secreta.** Llave de una cuenta de servicio para Firestore: el JSON en una línea o en base64. Vacía: usa *Application Default Credentials* (`GOOGLE_APPLICATION_CREDENTIALS` o la identidad de Google Cloud). |
+| `FIRESTORE_DATABASE` | `(default)` | Nombre de la base de Firestore. |
+| `FIRESTORE_COLLECTION_PREFIX` | `chordweaver_` | Prefijo de las colecciones, para compartir un proyecto de Firebase con otras apps sin tocar sus datos. |
 | `CORS_ORIGINS` | localhost:3000, 127.0.0.1:3000 y GitHub Pages | Lista separada por comas. |
-| `ENVIRONMENT` | `development` | `production` activa las protecciones de producción fuera de Vercel. |
+| `FIREBASE_AUTH_EMULATOR_HOST` / `FIRESTORE_EMULATOR_HOST` | vacío | Emuladores locales (solo desarrollo; el de Auth se ignora en producción). |
 
-Las tablas se crean al arrancar (`create_all`). Si la base de datos no responde, la API sigue sirviendo los endpoints sin estado (acordes, exploración, análisis, tablatura) y solo cuentas/progresiones devuelven 503.
+## Autenticación (Firebase)
+
+El registro, el inicio de sesión (email y contraseña o Google), la verificación de correo y la recuperación de contraseña ocurren en **Firebase Authentication**, desde el frontend. La API recibe el **ID token** de Firebase en `Authorization: Bearer <token>` y lo verifica en [`app/core/firebase.py`](app/core/firebase.py) con las llaves públicas de Google (en caché según su `Cache-Control`): firma RS256, `aud` igual al proyecto, `iss` igual a `https://securetoken.google.com/<proyecto>`, vigencia y `sub`. No necesita *service account* ni `firebase-admin`.
+
+- La primera petición autenticada crea el usuario en Firestore (`users/{uid}`), identificado por su UID de Firebase.
+- El nombre del proveedor (por ejemplo, Google) solo se usa para crear el perfil; después el usuario puede cambiarlo o borrarlo (`PATCH /api/v1/auth/me`).
+- `DELETE /api/v1/auth/me` borra los datos del usuario (y sus progresiones). La cuenta de Firebase la borra el cliente.
+
+### Configurar Firebase
+
+1. Crea un proyecto en <https://console.firebase.google.com> y registra una **app web**.
+2. En **Authentication → Sign-in method** activa **Correo electrónico/contraseña** y **Google**.
+3. En **Authentication → Settings → Authorized domains** agrega `localhost` y el dominio del frontend (por ejemplo `samuelcastillogt.github.io`).
+4. Copia el **Project ID** a `FIREBASE_PROJECT_ID` en la API. La configuración web (apiKey, authDomain…) va en el frontend.
+5. En **Firestore Database** crea la base (modo producción) y elige la región.
+6. En **Project settings → Service accounts → Generate new private key** descarga la llave y pégala en `FIREBASE_SERVICE_ACCOUNT` (JSON en una línea o `base64 -i llave.json | tr -d '\n'`). Nunca la subas al repositorio.
+7. Agrega a las reglas de Firestore (consola → Firestore → Reglas) los bloques de [`firestore.rules`](firestore.rules), que niegan el acceso directo a las colecciones de ChordWeaver. **Si el proyecto lo comparte otra app, no despliegues ese archivo**: reemplazaría todas sus reglas. Copia solo los dos bloques `match` dentro de las reglas existentes.
+
+## Base de datos (Firestore)
+
+Solo la API lee y escribe en Firestore, con la cuenta de servicio, que no está sujeta a las reglas. Por eso [`firestore.rules`](firestore.rules) **niega el acceso directo** a las colecciones de ChordWeaver desde navegadores y apps.
+
+| Colección | Documento | Campos |
+| --- | --- | --- |
+| `chordweaver_users` | UID de Firebase | `email`, `displayName`, `photoUrl`, `createdAt`, `lastLoginAt` |
+| `chordweaver_progressions` | id automático | `ownerId`, `name`, `chords`, `tonality`, `isPublic`, `source`, `createdAt`, `updatedAt` |
+
+El prefijo (`FIRESTORE_COLLECTION_PREFIX`) permite que ChordWeaver viva en un proyecto de Firebase que ya usa otra app sin chocar con sus colecciones (por ejemplo, su propia `users`).
+
+Las rutas no conocen Firestore: dependen de la interfaz `Repository` ([`app/repositories/base.py`](app/repositories/base.py)). [`firestore.py`](app/repositories/firestore.py) es la implementación real; [`memory.py`](app/repositories/memory.py) la usan los tests. La biblioteca de cada usuario se ordena en Python, así que no hace falta crear índices compuestos.
+
+Para desarrollar sin tocar el proyecto real: `npx firebase-tools emulators:start --only auth,firestore --project demo-chordweaver` (el emulador de Firestore necesita Java) y en `.env` define `FIREBASE_PROJECT_ID=demo-chordweaver`, `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` y `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080`.
 
 ### Despliegue en Vercel
 
-La API pública vive en `https://chords-api-python.vercel.app`. Para activar cuentas y progresiones persistentes:
+La API pública vive en `https://chords-api-python.vercel.app`. Variables a definir en el proyecto de Vercel:
 
-1. Crea una base PostgreSQL (Neon, Supabase, Vercel Postgres…) y define `DATABASE_URL`.
-2. Define `SECRET_KEY` con un valor largo y aleatorio (`python -c "import secrets; print(secrets.token_urlsafe(48))"`).
-3. Revisa `CORS_ORIGINS` (debe incluir `https://samuelcastillogt.github.io`).
+1. `FIREBASE_PROJECT_ID`: el ID de tu proyecto de Firebase.
+2. `FIREBASE_SERVICE_ACCOUNT`: la llave de la cuenta de servicio (márcala como *Sensitive*).
+3. `CORS_ORIGINS`: debe incluir el dominio del frontend (`https://samuelcastillogt.github.io`).
+4. `ENVIRONMENT=production`.
 
-El runtime de Python de Vercel no incluye `sqlite3`: sin `DATABASE_URL` la API sigue funcionando (acordes, análisis, exploración, tablatura) pero cuentas y progresiones responden 503 y `/health` informa `accounts: false`. El motor de base de datos se crea de forma diferida para que un driver ausente nunca impida arrancar la app.
+Sin Firestore configurado, la API sigue funcionando (acordes, análisis, exploración, tablatura y estilo), pero cuentas y progresiones responden 503.
 
 ## Endpoints
 
@@ -54,8 +91,11 @@ El runtime de Python de Vercel no incluye `sqlite3`: sin `DATABASE_URL` la API s
 | POST | `/api/v1/explore` | – | Igual que el anterior con filtro por tensión preferida. |
 | POST | `/api/v1/analyze` | – | Análisis completo de una progresión; detecta la tonalidad si no se envía. |
 | POST | `/api/v1/tablature` | – | Tablatura de texto con posiciones y arpegio sugerido. |
-| POST | `/api/v1/auth/register` · `/auth/login` | – | Devuelven `{accessToken, user}`. |
-| GET | `/api/v1/auth/me` | Bearer | Usuario de la sesión. |
+| POST | `/api/v1/style/parse` | – | Lee una canción (acordes sobre letra, ChordPro o tablatura ASCII) y devuelve acordes, secciones y tonalidad. |
+| POST | `/api/v1/style/learn` | – | Aprende el perfil de estilo de una banda a partir de sus canciones. |
+| POST | `/api/v1/style/suggest` | – | Siguientes acordes mezclando el estilo de la banda con el motor armónico. |
+| GET | `/api/v1/auth/me` | Bearer | Usuario de la sesión (lo crea en la primera llamada). |
+| PATCH / DELETE | `/api/v1/auth/me` | Bearer | Cambia el nombre visible / borra los datos del usuario. |
 | GET/POST | `/api/v1/progressions` | Bearer | Biblioteca del usuario. |
 | GET | `/api/v1/progressions/{id}` | opcional | El dueño o cualquiera si `isPublic` es `true`. |
 | PUT/DELETE | `/api/v1/progressions/{id}` | Bearer | Solo el dueño. `PUT {"isPublic": true}` la comparte. |
@@ -88,17 +128,17 @@ curl -X POST localhost:8000/api/v1/analyze -H 'content-type: application/json' \
 
 ```
 app/
-├── main.py                 # FastAPI, CORS, lifespan (crea tablas)
-├── core/config.py          # Settings (env), normalización de DATABASE_URL, flags de producción
-├── core/security.py        # PBKDF2 (600k iteraciones), JWT, dependencias de usuario
-├── db.py                   # Motor async SQLAlchemy y sesión con degradación a 503
-├── models/__init__.py      # User, Progression
-├── domain/chord.py         # Notas, cualidades, ChordNode y parser de cifrados
-├── domain/catalog.py       # Catálogo único (ALL_CHORDS, CORE_CHORDS, BY_ID) y find_chord
-├── domain/theory.py        # Tonalidades, grados, funciones, detección de tonalidad, sustituciones
-├── engine/criteria.py      # Los 7 criterios de conexión
-├── engine/connection_engine.py  # score_connection (con caché LRU) y find_connections
+├── main.py                 # FastAPI, CORS, logging, lifespan, /health
+├── core/config.py          # Settings (env): Firebase, Firestore, CORS
+├── core/firebase.py        # Verificación de ID tokens de Firebase (llaves públicas de Google)
+├── core/security.py        # Dependencias de usuario y vinculación de cuentas
+├── repositories/           # Interfaz Repository, Firestore y memoria (tests)
+├── domain/                 # Teoría musical: acordes, catálogo, tonalidades
+├── engine/                 # Motor de conexiones (7 criterios)
+├── style/                  # Lectura de cifrados/tablaturas y modelo de estilo de banda
 └── api/                    # Routers y esquemas Pydantic
+firestore.rules             # Bloquea el acceso directo de clientes a Firestore
+tests/                      # pytest (tokens firmados con una llave de prueba, Firestore falso)
 ```
 
 ## Modelo musical
@@ -171,13 +211,12 @@ Categorías: `natural` ≥ 70, `media` ≥ 50, `tensa` ≥ 30, `extrema` < 30.
 
 - Se trabaja con clases de altura: no hay octavas, inversiones ni voicings reales (el bajo de los slash chords se reporta pero no puntúa).
 - La escritura es solo con sostenidos en los IDs (`A#`); las etiquetas de tonalidad sí usan bemoles (`Sib mayor (Bb)`).
-- Las tablas se crean con `create_all`; si el esquema cambia, añade migraciones (Alembic) antes de tener datos reales en producción.
 - La tablatura usa formas comunes y, para acordes poco frecuentes, una disposición compacta generada.
 
-## Tests
+## Calidad
 
 ```bash
-pytest -q
+make check   # ruff (lint + formato) y pytest con cobertura
 ```
 
-Cubren el parser, la detección de tonalidad, los grados, el motor, la configuración y la API completa (incluye privacidad de progresiones entre usuarios). La CI (`.github/workflows/ci.yml`) los ejecuta en cada push.
+Los tests cubren el parser, la detección de tonalidad, los grados, el motor, el estilo de banda, la configuración, la verificación de tokens el repositorio de Firestore (con un cliente falso que reproduce la interfaz usada) y la API completa (incluye la privacidad de progresiones entre usuarios). Los tokens de Firebase se firman con una llave RSA de prueba, así que la verificación se ejercita de verdad sin red. La CI (`.github/workflows/ci.yml`) ejecuta lint y tests en cada push.

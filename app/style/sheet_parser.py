@@ -103,7 +103,7 @@ def parse_song(text: str, title: str = "Canción") -> ParsedSong:
         section = SECTION_RE.match(stripped)
         if section:
             sections.append(Section(section.group("name").lower()))
-            stripped = stripped[section.end():].strip()
+            stripped = stripped[section.end() :].strip()
             if not stripped:
                 continue
 

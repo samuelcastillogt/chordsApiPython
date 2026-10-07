@@ -11,7 +11,9 @@ def note_index(note) -> int:
 def shared_notes(a: ChordNode, b: ChordNode) -> tuple[float, str]:
     common = a.pitch_classes & b.pitch_classes
     ratio = len(common) / min(len(a.pitch_classes), len(b.pitch_classes))
-    score = 100.0 if ratio >= 1 else 85.0 if ratio >= 0.66 else 70.0 if ratio >= 0.5 else 55.0 if ratio >= 0.33 else 40.0 if ratio > 0 else 0.0
+    score = (
+        100.0 if ratio >= 1 else 85.0 if ratio >= 0.66 else 70.0 if ratio >= 0.5 else 55.0 if ratio >= 0.33 else 40.0 if ratio > 0 else 0.0
+    )
     names = sorted(note.value for note in set(a.notes) & set(b.notes))
     return score, f"{len(common)} nota(s) en común: {', '.join(names) or 'ninguna'}"
 
@@ -27,10 +29,7 @@ def voice_movement(a: ChordNode, b: ChordNode) -> tuple[float, str]:
     """Smallest total semitone motion when moving the voices of a into b."""
     small, large = (a.notes, b.notes) if len(a.notes) <= len(b.notes) else (b.notes, a.notes)
     best = min(
-        sum(
-            min(abs(note_index(x) - note_index(y)), 12 - abs(note_index(x) - note_index(y)))
-            for x, y in zip(small, perm)
-        )
+        sum(min(abs(note_index(x) - note_index(y)), 12 - abs(note_index(x) - note_index(y))) for x, y in zip(small, perm, strict=True))
         for perm in itertools.permutations(large, len(small))
     )
     scores = {0: 100, 1: 90, 2: 80, 3: 65, 4: 50, 5: 35, 6: 20}
@@ -72,9 +71,15 @@ def transformation_type(a: ChordNode, b: ChordNode) -> tuple[float, str]:
 
 
 FUNCTION_FLOW = {
-    ("T", "SD"): 80.0, ("T", "D"): 70.0, ("T", "T"): 60.0,
-    ("SD", "D"): 95.0, ("SD", "T"): 75.0, ("SD", "SD"): 55.0,
-    ("D", "T"): 100.0, ("D", "D"): 45.0, ("D", "SD"): 35.0,
+    ("T", "SD"): 80.0,
+    ("T", "D"): 70.0,
+    ("T", "T"): 60.0,
+    ("SD", "D"): 95.0,
+    ("SD", "T"): 75.0,
+    ("SD", "SD"): 55.0,
+    ("D", "T"): 100.0,
+    ("D", "D"): 45.0,
+    ("D", "SD"): 35.0,
 }
 
 
