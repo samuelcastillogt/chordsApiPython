@@ -49,3 +49,16 @@ def test_service_account_accepts_json_or_base64():
 def test_service_account_rejects_anything_else(raw):
     with pytest.raises(RepositoryUnavailableError):
         parse_service_account(raw)
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("Production", "production"), (" prod ", "production"), ("DEV", "development")])
+def test_environment_is_forgiving_about_spelling(monkeypatch, raw, expected):
+    monkeypatch.setenv("ENVIRONMENT", raw)
+
+    assert Settings().environment == expected
+
+
+def test_invalid_log_level_falls_back_to_info(monkeypatch):
+    monkeypatch.setenv("LOG_LEVEL", "verbose")
+
+    assert Settings().log_level == "INFO"

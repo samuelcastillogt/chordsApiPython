@@ -4,6 +4,19 @@ version = "0.3.0"
 description = "ChordWeaver API: explains why a chord progression works and suggests what comes next."
 readme = "README.md"
 requires-python = ">=3.12"
+# Keep in sync with requirements.txt (tests/test_core/test_packaging.py checks it): Vercel installs
+# from this file, Docker and CI from requirements.txt.
+dependencies = [
+    "fastapi==0.139.2",
+    "uvicorn[standard]==0.51.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "python-jose[cryptography]==3.5.0",
+    "google-cloud-firestore==2.34.0",
+]
+
+[tool.vercel]
+entrypoint = "app.main:app"
 
 [tool.ruff]
 line-length = 140

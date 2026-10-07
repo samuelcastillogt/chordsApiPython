@@ -31,6 +31,22 @@ class Settings(BaseSettings):
 
     cors_origins: str = DEFAULT_CORS_ORIGINS
 
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, value: object) -> object:
+        # "Production", "prod" or "dev" in a hosting dashboard must not crash the app on startup.
+        aliases = {"prod": "production", "dev": "development", "local": "development"}
+        if isinstance(value, str):
+            text = value.strip().lower()
+            return aliases.get(text, text)
+        return value
+
+    @field_validator("log_level", mode="after")
+    @classmethod
+    def valid_log_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        return level if level in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"} else "INFO"
+
     @field_validator("firebase_project_id", mode="after")
     @classmethod
     def strip_project_id(cls, value: str) -> str:
