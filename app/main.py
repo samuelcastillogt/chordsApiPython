@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import analyze, auth, chords, explore, progressions, tablature
+from app.api import analyze, auth, chords, explore, progressions, style, tablature
 from app.core.config import settings
 from app.db import init_db
 
@@ -35,6 +35,7 @@ app.include_router(explore.router, prefix="/api/v1", tags=["explore"])
 app.include_router(analyze.router, prefix="/api/v1", tags=["analyze"])
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(tablature.router, prefix="/api/v1", tags=["tablature"])
+app.include_router(style.router, prefix="/api/v1", tags=["style"])
 
 
 @app.get("/health", tags=["health"])

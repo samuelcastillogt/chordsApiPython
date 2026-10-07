@@ -199,3 +199,117 @@ class TokenResponse(BaseModel):
     accessToken: str
     tokenType: str = "bearer"
     user: UserResponse
+
+
+class StyleParseRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=40000)
+    title: str | None = Field(default=None, max_length=120)
+    key: str | None = Field(default=None, max_length=8)
+
+
+class StyleSectionResponse(BaseModel):
+    name: str
+    chords: list[str]
+
+
+class StyleParseResponse(BaseModel):
+    title: str
+    chords: list[str]
+    sections: list[StyleSectionResponse]
+    key: str | None
+    keyLabel: str | None
+    tabChords: int
+    unknown: list[str]
+
+
+class StyleSongInput(BaseModel):
+    text: str = Field(min_length=1, max_length=40000)
+    title: str | None = Field(default=None, max_length=120)
+    key: str | None = Field(default=None, max_length=8)
+
+
+class StyleLearnRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    songs: list[StyleSongInput] = Field(min_length=1, max_length=60)
+
+
+class StyleTransitionBucket(BaseModel):
+    n: dict[str, int]
+    s: dict[str, int]
+
+
+class StyleUsage(BaseModel):
+    count: int
+    songs: int
+    role: str
+    numeral: str
+
+
+class StyleSong(BaseModel):
+    title: str
+    key: str
+    keyLabel: str
+    chords: list[str]
+
+
+class StylePattern(BaseModel):
+    tokens: list[str]
+    numerals: list[str]
+    count: int
+    songs: int
+    loop: bool
+
+
+class StyleProfile(BaseModel):
+    version: int = 1
+    name: str
+    songs: list[StyleSong]
+    modes: dict[str, int]
+    unigrams: dict[str, int]
+    transitions: dict[str, StyleTransitionBucket]
+    colors: dict[str, dict[str, int]]
+    usage: dict[str, StyleUsage]
+    starts: dict[str, int]
+    endings: dict[str, int]
+    patterns: list[StylePattern]
+    traits: list[str]
+
+
+class StyleProfileResponse(StyleProfile):
+    skipped: list[str] = []
+
+
+class StyleSuggestRequest(BaseModel):
+    profile: StyleProfile
+    history: list[str] = Field(min_length=1, max_length=64)
+    tonality: str | None = Field(default=None, max_length=8)
+    weight: float = Field(default=0.65, ge=0, le=1)
+    maxResults: int = Field(default=24, ge=1, le=72)
+
+
+class StyleInfoResponse(BaseModel):
+    score: float
+    probability: float
+    numeral: str
+    context: list[str]
+    count: int
+    songs: int
+    evidence: str
+
+
+class StyleConnectionResponse(ConnectionResponse):
+    engineScore: float
+    style: StyleInfoResponse
+
+
+class StylePhraseStep(BaseModel):
+    chord: str
+    numeral: str
+
+
+class StyleSuggestResponse(BaseModel):
+    source: str
+    key: str
+    context: list[str]
+    connections: list[StyleConnectionResponse]
+    phrase: list[StylePhraseStep]
