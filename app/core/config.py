@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     firebase_auth_emulator_host: str = ""
 
     cors_origins: str = DEFAULT_CORS_ORIGINS
+    # Public URL of the web app: share pages (/p/{id}) send visitors there.
+    web_url: str = "https://samuelcastillogt.github.io/chordsAppWeb"
 
     # Payment processor behind /api/v1/billing. "mock" activates plans without charging anything.
     billing_provider: Literal["mock"] = "mock"

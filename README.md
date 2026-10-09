@@ -35,6 +35,7 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | `FIRESTORE_COLLECTION_PREFIX` | `chordweaver_` | Prefijo de las colecciones, para compartir un proyecto de Firebase con otras apps sin tocar sus datos. |
 | `CORS_ORIGINS` | localhost:3000, 127.0.0.1:3000 y GitHub Pages | Lista separada por comas. |
 | `FIREBASE_AUTH_EMULATOR_HOST` / `FIRESTORE_EMULATOR_HOST` | vacío | Emuladores locales (solo desarrollo; el de Auth se ignora en producción). |
+| `WEB_URL` | GitHub Pages de la web | Destino de los enlaces para compartir (`/p/{id}`). |
 | `BILLING_PROVIDER` | `mock` | Procesador de pagos. `mock` activa el plan al instante y no cobra nada (ver [Planes y suscripciones](#planes-y-suscripciones)). |
 
 ## Autenticación (Firebase)
@@ -100,6 +101,7 @@ Sin Firestore configurado, la API sigue funcionando (acordes, análisis, explora
 | GET/POST | `/api/v1/progressions` | Bearer | Biblioteca del usuario. |
 | GET | `/api/v1/progressions/{id}` | opcional | El dueño o cualquiera si `isPublic` es `true`. |
 | PUT/DELETE | `/api/v1/progressions/{id}` | Bearer | Solo el dueño. `PUT {"isPublic": true}` la comparte. |
+| GET | `/p/{id}` | – | Enlace para compartir: HTML con vista previa (Open Graph) de una progresión pública que redirige al explorador de la web. |
 | GET | `/api/v1/plans` | – | Planes y precios (USD, con precio para Latinoamérica). `provider: "mock"` mientras los pagos son simulados. |
 | GET | `/api/v1/billing/subscription` | Bearer | Plan del usuario, renovación y uso (`saved` / `saveLimit`). |
 | POST | `/api/v1/billing/checkout` | Bearer | `{"plan": "pro", "period": "yearly", "region": "latam"}`. Con `mock` activa el plan; con un procesador real devolverá `checkoutUrl`. |
