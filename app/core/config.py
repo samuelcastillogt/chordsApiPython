@@ -31,6 +31,9 @@ class Settings(BaseSettings):
 
     cors_origins: str = DEFAULT_CORS_ORIGINS
 
+    # Payment processor behind /api/v1/billing. "mock" activates plans without charging anything.
+    billing_provider: Literal["mock"] = "mock"
+
     @field_validator("environment", mode="before")
     @classmethod
     def normalize_environment(cls, value: object) -> object:

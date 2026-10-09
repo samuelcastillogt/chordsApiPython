@@ -17,6 +17,12 @@ class UserRecord:
     photo_url: str | None = None
     created_at: datetime = field(default_factory=utcnow)
     last_login_at: datetime | None = None
+    # Subscription (see app/domain/plans.py and app/billing). Only the billing layer changes these.
+    plan: str = "free"
+    plan_period: str | None = None  # monthly | yearly | once
+    plan_provider: str | None = None  # mock today; the real processor later
+    plan_started_at: datetime | None = None
+    plan_renews_at: datetime | None = None
 
 
 @dataclass
@@ -42,6 +48,8 @@ class Repository(Protocol):
 
     async def list_progressions(self, owner_id: str) -> list[ProgressionRecord]:
         """The owner's progressions, most recently updated first."""
+
+    async def count_progressions(self, owner_id: str) -> int: ...
 
     async def get_progression(self, progression_id: str) -> ProgressionRecord | None: ...
 

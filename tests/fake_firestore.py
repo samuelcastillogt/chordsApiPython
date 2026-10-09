@@ -41,6 +41,25 @@ class FakeQuery:
             if all(f.op_string == "==" and data.get(f.field_path) == f.value for f in self._filters):
                 yield FakeSnapshot(self._collection.document(doc_id), data)
 
+    def count(self) -> "FakeCountQuery":
+        return FakeCountQuery(self)
+
+
+class FakeAggregationResult:
+    def __init__(self, value: int):
+        self.value = value
+
+
+class FakeCountQuery:
+    """Mirrors AsyncAggregationQuery: get() returns [[AggregationResult]]."""
+
+    def __init__(self, query: FakeQuery):
+        self._query = query
+
+    async def get(self) -> list[list[FakeAggregationResult]]:
+        total = len([snapshot async for snapshot in self._query.stream()])
+        return [[FakeAggregationResult(total)]]
+
 
 class FakeCollection(FakeQuery):
     def __init__(self, store: dict, name: str):

@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import analyze, auth, chords, explore, progressions, style, tablature
+from app.api import analyze, auth, billing, chords, explore, progressions, style, tablature
 from app.core.config import settings
 from app.repositories import Repository, optional_repository, repository_available
 
@@ -46,6 +46,7 @@ app.include_router(progressions.router, prefix=API_PREFIX, tags=["progressions"]
 app.include_router(explore.router, prefix=API_PREFIX, tags=["explore"])
 app.include_router(analyze.router, prefix=API_PREFIX, tags=["analyze"])
 app.include_router(auth.router, prefix=API_PREFIX, tags=["auth"])
+app.include_router(billing.router, prefix=API_PREFIX, tags=["billing"])
 app.include_router(tablature.router, prefix=API_PREFIX, tags=["tablature"])
 app.include_router(style.router, prefix=API_PREFIX, tags=["style"])
 
@@ -53,4 +54,4 @@ app.include_router(style.router, prefix=API_PREFIX, tags=["style"])
 @app.get("/health", tags=["health"])
 async def health_check(repository: Repository | None = Depends(optional_repository)):
     accounts = settings.auth_enabled and repository is not None
-    return {"status": "ok", "accounts": accounts, "version": app.version}
+    return {"status": "ok", "accounts": accounts, "billing": settings.billing_provider, "version": app.version}

@@ -35,6 +35,7 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | `FIRESTORE_COLLECTION_PREFIX` | `chordweaver_` | Prefijo de las colecciones, para compartir un proyecto de Firebase con otras apps sin tocar sus datos. |
 | `CORS_ORIGINS` | localhost:3000, 127.0.0.1:3000 y GitHub Pages | Lista separada por comas. |
 | `FIREBASE_AUTH_EMULATOR_HOST` / `FIRESTORE_EMULATOR_HOST` | vacío | Emuladores locales (solo desarrollo; el de Auth se ignora en producción). |
+| `BILLING_PROVIDER` | `mock` | Procesador de pagos. `mock` activa el plan al instante y no cobra nada (ver [Planes y suscripciones](#planes-y-suscripciones)). |
 
 ## Autenticación (Firebase)
 
@@ -99,6 +100,27 @@ Sin Firestore configurado, la API sigue funcionando (acordes, análisis, explora
 | GET/POST | `/api/v1/progressions` | Bearer | Biblioteca del usuario. |
 | GET | `/api/v1/progressions/{id}` | opcional | El dueño o cualquiera si `isPublic` es `true`. |
 | PUT/DELETE | `/api/v1/progressions/{id}` | Bearer | Solo el dueño. `PUT {"isPublic": true}` la comparte. |
+| GET | `/api/v1/plans` | – | Planes y precios (USD, con precio para Latinoamérica). `provider: "mock"` mientras los pagos son simulados. |
+| GET | `/api/v1/billing/subscription` | Bearer | Plan del usuario, renovación y uso (`saved` / `saveLimit`). |
+| POST | `/api/v1/billing/checkout` | Bearer | `{"plan": "pro", "period": "yearly", "region": "latam"}`. Con `mock` activa el plan; con un procesador real devolverá `checkoutUrl`. |
+| POST | `/api/v1/billing/cancel` | Bearer | Vuelve al plan Gratis; las progresiones guardadas se conservan. |
+
+## Planes y suscripciones
+
+| Plan | Precio | Progresiones guardadas |
+| --- | --- | --- |
+| Gratis | – | 5 (al llegar al límite, `POST /progressions` responde **402**) |
+| Pro | USD 4,99/mes o 29,99/año (19,99/año en Latinoamérica) | Sin límite |
+| Vitalicio fundador | USD 69 en un pago (39 en Latinoamérica) | Sin límite |
+
+Los planes y precios viven en `app/domain/plans.py`; la web los lee de `/api/v1/plans`. El plan se guarda en el usuario (`plan`, `planPeriod`, `planProvider`, `planStartedAt`, `planRenewsAt`).
+
+**Pagos simulados (`BILLING_PROVIDER=mock`).** El checkout activa el plan sin cobrar y lo marca con `planProvider: "mock"`, para probar el flujo completo antes de tener procesador. Para conectar uno real (Paddle, Lemon Squeezy, Recurrente):
+
+1. Implementa `BillingProvider` en `app/billing/` con `start_checkout` devolviendo la URL de pago del procesador (con el uid del usuario en los metadatos).
+2. Agrega una ruta de webhook que verifique la firma del procesador y llame a `activate_plan` o `cancel_plan`.
+3. Registra el proveedor en `PROVIDERS`, amplía `billing_provider` en `config.py` y cambia `BILLING_PROVIDER`.
+4. Antes de cobrar, decide qué hacer con las suscripciones `mock` (pasarlas a `free` o regalarlas a los primeros testers).
 
 ### Ejemplo: analizar una canción
 
@@ -133,7 +155,8 @@ app/
 ├── core/firebase.py        # Verificación de ID tokens de Firebase (llaves públicas de Google)
 ├── core/security.py        # Dependencias de usuario y vinculación de cuentas
 ├── repositories/           # Interfaz Repository, Firestore y memoria (tests)
-├── domain/                 # Teoría musical: acordes, catálogo, tonalidades
+├── billing/                # Proveedores de pago (mock por ahora), activar y cancelar planes
+├── domain/                 # Teoría musical: acordes, catálogo, tonalidades; plans.py: planes y precios
 ├── engine/                 # Motor de conexiones (7 criterios)
 ├── style/                  # Lectura de cifrados/tablaturas y modelo de estilo de banda
 └── api/                    # Routers y esquemas Pydantic

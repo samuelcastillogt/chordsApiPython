@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -188,6 +190,52 @@ class UserResponse(BaseModel):
     email: str | None
     displayName: str | None
     photoUrl: str | None = None
+    plan: str = "free"
+
+
+class PriceResponse(BaseModel):
+    period: Literal["monthly", "yearly", "once"]
+    amount: float
+    currency: str
+    region: Literal["global", "latam"]
+
+
+class PlanResponse(BaseModel):
+    id: str
+    name: str
+    tagline: str
+    saveLimit: int | None
+    features: list[str]
+    prices: list[PriceResponse]
+
+
+class PlansResponse(BaseModel):
+    provider: str
+    plans: list[PlanResponse]
+
+
+class SubscriptionResponse(BaseModel):
+    plan: str
+    planName: str
+    period: str | None
+    provider: str | None
+    startedAt: str | None
+    renewsAt: str | None
+    saved: int
+    saveLimit: int | None
+
+
+class CheckoutRequest(BaseModel):
+    plan: Literal["pro", "lifetime"]
+    period: Literal["monthly", "yearly", "once"]
+    region: Literal["global", "latam"] = "global"
+
+
+class CheckoutResponse(BaseModel):
+    provider: str
+    checkoutUrl: str | None
+    activated: bool
+    subscription: SubscriptionResponse
 
 
 class UserUpdateRequest(BaseModel):

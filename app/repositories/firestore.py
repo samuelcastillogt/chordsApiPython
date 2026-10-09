@@ -2,7 +2,8 @@
 
 Collections (names carry FIRESTORE_COLLECTION_PREFIX, "chordweaver_" by default, so the app
 can live in a Firebase project shared with other apps):
-- ``<prefix>users/{uid}``: email, displayName, photoUrl, createdAt, lastLoginAt (id = Firebase uid).
+- ``<prefix>users/{uid}``: email, displayName, photoUrl, createdAt, lastLoginAt, plan, planPeriod,
+  planProvider, planStartedAt, planRenewsAt (id = Firebase uid).
 - ``<prefix>progressions/{id}``: ownerId, name, chords, tonality, isPublic, source, createdAt, updatedAt.
 
 Only the API reads and writes (with a service account, which bypasses security rules), so
@@ -28,6 +29,11 @@ def _user_to_doc(user: UserRecord) -> dict[str, Any]:
         "photoUrl": user.photo_url,
         "createdAt": user.created_at,
         "lastLoginAt": user.last_login_at,
+        "plan": user.plan,
+        "planPeriod": user.plan_period,
+        "planProvider": user.plan_provider,
+        "planStartedAt": user.plan_started_at,
+        "planRenewsAt": user.plan_renews_at,
     }
 
 
@@ -39,6 +45,11 @@ def _user_from_doc(user_id: str, data: dict[str, Any]) -> UserRecord:
         photo_url=data.get("photoUrl"),
         created_at=data.get("createdAt") or utcnow(),
         last_login_at=data.get("lastLoginAt"),
+        plan=data.get("plan") or "free",
+        plan_period=data.get("planPeriod"),
+        plan_provider=data.get("planProvider"),
+        plan_started_at=data.get("planStartedAt"),
+        plan_renews_at=data.get("planRenewsAt"),
     )
 
 
@@ -94,6 +105,10 @@ class FirestoreRepository:
     async def list_progressions(self, owner_id: str) -> list[ProgressionRecord]:
         progressions = [_progression_from_doc(snapshot.id, snapshot.to_dict() or {}) async for snapshot in self._owned(owner_id).stream()]
         return sorted(progressions, key=lambda item: item.updated_at, reverse=True)
+
+    async def count_progressions(self, owner_id: str) -> int:
+        result = await self._owned(owner_id).count().get()
+        return int(result[0][0].value)
 
     async def get_progression(self, progression_id: str) -> ProgressionRecord | None:
         snapshot = await self.client.collection(self.progressions).document(progression_id).get()

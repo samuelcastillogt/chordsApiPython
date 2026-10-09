@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 def serialize_user(user: UserRecord) -> dict:
-    return {"id": user.id, "email": user.email, "displayName": user.display_name, "photoUrl": user.photo_url}
+    return {"id": user.id, "email": user.email, "displayName": user.display_name, "photoUrl": user.photo_url, "plan": user.plan}
 
 
 @router.get("/auth/me", response_model=UserResponse)

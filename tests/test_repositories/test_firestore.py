@@ -64,3 +64,21 @@ def test_deleting_a_user_removes_their_progressions_in_batches(monkeypatch):
     assert client.store["cw_users"] == {}
     assert list(client.store["cw_progressions"]) == [keep.id]
     assert client.batch_sizes == [2, 2]  # 3 progressions + the user document.
+
+
+def test_plan_fields_round_trip_and_progressions_are_counted():
+    repository, client = make()
+    now = utcnow()
+    run(repository.save_user(UserRecord(id="uid-1", plan="pro", plan_period="yearly", plan_provider="mock", plan_started_at=now)))
+    for index in range(3):
+        run(repository.create_progression(ProgressionRecord(owner_id="uid-1", name=f"P{index}", chords=["C"])))
+    run(repository.create_progression(ProgressionRecord(owner_id="uid-2", name="Otra", chords=["C"])))
+
+    assert client.store["cw_users"]["uid-1"]["plan"] == "pro"
+    user = run(repository.get_user("uid-1"))
+    assert user is not None and user.plan == "pro" and user.plan_period == "yearly" and user.plan_started_at == now
+    assert run(repository.count_progressions("uid-1")) == 3
+    # Users stored before plans existed read as Gratis.
+    client.store["cw_users"]["old"] = {"email": "old@example.com"}
+    legacy = run(repository.get_user("old"))
+    assert legacy is not None and legacy.plan == "free"

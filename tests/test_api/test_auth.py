@@ -16,7 +16,7 @@ def test_first_request_creates_the_user_from_the_token(repository):
     second = client.get("/api/v1/auth/me", headers=headers)
 
     assert first.status_code == 200
-    assert first.json() == {"id": "ana-uid", "email": "ana@example.com", "displayName": "Ana", "photoUrl": None}
+    assert first.json() == {"id": "ana-uid", "email": "ana@example.com", "displayName": "Ana", "photoUrl": None, "plan": "free"}
     assert second.json()["id"] == "ana-uid"
     assert set(repository.users) == {"ana-uid"}
 

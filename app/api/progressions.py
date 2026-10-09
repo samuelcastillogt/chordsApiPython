@@ -10,6 +10,7 @@ from app.api.schemas import (
 )
 from app.core.security import get_current_user, get_optional_user
 from app.domain.catalog import find_chord
+from app.domain.plans import get_plan
 from app.domain.theory import parse_key
 from app.repositories import ProgressionRecord, Repository, UserRecord, get_repository
 
@@ -62,6 +63,12 @@ async def create_progression(
     user: UserRecord = Depends(get_current_user),
     repository: Repository = Depends(get_repository),
 ):
+    limit = get_plan(user.plan).save_limit
+    if limit is not None and await repository.count_progressions(user.id) >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Llegaste al límite de {limit} progresiones del plan Gratis. Pásate a Pro para guardar sin límite.",
+        )
     progression = await repository.create_progression(
         ProgressionRecord(
             owner_id=user.id,

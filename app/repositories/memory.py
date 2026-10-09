@@ -27,6 +27,9 @@ class InMemoryRepository:
         owned = [replace(item) for item in self.progressions.values() if item.owner_id == owner_id]
         return sorted(owned, key=lambda item: item.updated_at, reverse=True)
 
+    async def count_progressions(self, owner_id: str) -> int:
+        return sum(1 for item in self.progressions.values() if item.owner_id == owner_id)
+
     async def get_progression(self, progression_id: str) -> ProgressionRecord | None:
         progression = self.progressions.get(progression_id)
         return replace(progression) if progression else None
