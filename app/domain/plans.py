@@ -55,9 +55,9 @@ PLANS: dict[str, Plan] = {
         features=(
             "Todo lo del plan Gratis",
             "Progresiones guardadas sin límite",
-            "Estilos de banda guardados en tu cuenta",
-            "Exportación a MIDI y tablatura",
-            "Acceso anticipado a funciones nuevas",
+            "Acceso anticipado a lo nuevo: modo alabanza y modo docente",
+            "Soporte prioritario por correo",
+            "Apoyas una herramienta de música hecha en español",
         ),
         prices=(
             Price("monthly", 4.99),
@@ -73,7 +73,7 @@ PLANS: dict[str, Plan] = {
         features=(
             "Todo lo del plan Pro, para siempre",
             "Precio de fundador: no se repetirá",
-            "Tu nombre en la lista de fundadores (opcional)",
+            "Insignia de fundador en tu cuenta",
         ),
         prices=(
             Price("once", 69.0),

@@ -58,6 +58,6 @@ async def share_page(progression_id: str, repository: Repository = Depends(get_r
         description=escape(description),
         target=escape(target),
         target_js=escape(repr(target)),
-        image=escape(f"{web}/opengraph-image.png"),
+        image=escape(f"{web}/og.png"),
     )
     return HTMLResponse(html, status_code=status_code)
