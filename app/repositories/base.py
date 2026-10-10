@@ -38,6 +38,18 @@ class ProgressionRecord:
     updated_at: datetime = field(default_factory=utcnow)
 
 
+@dataclass
+class FeedbackRecord:
+    message: str
+    rating: int | None = None  # 1..5
+    email: str | None = None
+    page: str | None = None
+    source: str = "web"  # web | app
+    user_id: str | None = None
+    id: str = ""
+    created_at: datetime = field(default_factory=utcnow)
+
+
 class Repository(Protocol):
     async def get_user(self, user_id: str) -> UserRecord | None: ...
 
@@ -58,6 +70,8 @@ class Repository(Protocol):
     async def update_progression(self, progression: ProgressionRecord) -> ProgressionRecord: ...
 
     async def delete_progression(self, progression_id: str) -> None: ...
+
+    async def save_feedback(self, feedback: FeedbackRecord) -> FeedbackRecord: ...
 
 
 class RepositoryUnavailableError(Exception):

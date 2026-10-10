@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # Public URL of the web app: share pages (/p/{id}) send visitors there.
     web_url: str = "https://samuelcastillogt.github.io/chordsAppWeb"
 
+    # Error monitoring: Sentry project DSN. Empty disables it.
+    sentry_dsn: str = ""
+    # Secret for GET /api/v1/monitoring/test, which raises an error on purpose to check monitoring.
+    monitoring_test_token: str = ""
+
     # Payment processor behind /api/v1/billing. "mock" activates plans without charging anything.
     billing_provider: Literal["mock"] = "mock"
 

@@ -4,6 +4,7 @@ Collections (names carry FIRESTORE_COLLECTION_PREFIX, "chordweaver_" by default,
 can live in a Firebase project shared with other apps):
 - ``<prefix>users/{uid}``: email, displayName, photoUrl, createdAt, lastLoginAt, plan, planPeriod,
   planProvider, planStartedAt, planRenewsAt (id = Firebase uid).
+- ``<prefix>feedback/{id}``: message, rating, email, page, source, userId, createdAt (written only).
 - ``<prefix>progressions/{id}``: ownerId, name, chords, tonality, isPublic, source, createdAt, updatedAt.
 
 Only the API reads and writes (with a service account, which bypasses security rules), so
@@ -17,7 +18,7 @@ from typing import Any
 from google.cloud.firestore import AsyncClient
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from app.repositories.base import ProgressionRecord, UserRecord, utcnow
+from app.repositories.base import FeedbackRecord, ProgressionRecord, UserRecord, utcnow
 
 BATCH_LIMIT = 400  # Firestore allows 500 writes per batch.
 
@@ -85,6 +86,7 @@ class FirestoreRepository:
         self.client = client
         self.users = f"{prefix}users"
         self.progressions = f"{prefix}progressions"
+        self.feedback = f"{prefix}feedback"
 
     async def get_user(self, user_id: str) -> UserRecord | None:
         snapshot = await self.client.collection(self.users).document(user_id).get()
@@ -128,6 +130,22 @@ class FirestoreRepository:
 
     async def delete_progression(self, progression_id: str) -> None:
         await self.client.collection(self.progressions).document(progression_id).delete()
+
+    async def save_feedback(self, feedback: FeedbackRecord) -> FeedbackRecord:
+        ref = self.client.collection(self.feedback).document()
+        saved = replace(feedback, id=ref.id)
+        await ref.set(
+            {
+                "message": saved.message,
+                "rating": saved.rating,
+                "email": saved.email,
+                "page": saved.page,
+                "source": saved.source,
+                "userId": saved.user_id,
+                "createdAt": saved.created_at,
+            }
+        )
+        return saved
 
     def _owned(self, owner_id: str):
         return self.client.collection(self.progressions).where(filter=FieldFilter("ownerId", "==", owner_id))

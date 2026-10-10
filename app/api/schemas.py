@@ -225,6 +225,21 @@ class SubscriptionResponse(BaseModel):
     saveLimit: int | None
 
 
+class FeedbackRequest(BaseModel):
+    message: str = Field(min_length=3, max_length=2000)
+    rating: int | None = Field(default=None, ge=1, le=5)
+    email: str | None = Field(default=None, max_length=200)
+    page: str | None = Field(default=None, max_length=200)
+    source: Literal["web", "app"] = "web"
+    # Honeypot: hidden in the form, only bots fill it.
+    website: str | None = Field(default=None, max_length=200)
+
+
+class FeedbackResponse(BaseModel):
+    id: str
+    received: bool
+
+
 class CheckoutRequest(BaseModel):
     plan: Literal["pro", "lifetime"]
     period: Literal["monthly", "yearly", "once"]

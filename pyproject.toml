@@ -1,6 +1,6 @@
 [project]
 name = "chordweaver-api"
-version = "0.3.0"
+version = "0.4.0"
 description = "ChordWeaver API: explains why a chord progression works and suggests what comes next."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings==2.14.2",
     "python-jose[cryptography]==3.5.0",
     "google-cloud-firestore==2.34.0",
+    "sentry-sdk[fastapi]==2.71.0",
 ]
 
 [tool.vercel]

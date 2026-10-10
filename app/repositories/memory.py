@@ -3,13 +3,14 @@
 from dataclasses import replace
 from uuid import uuid4
 
-from app.repositories.base import ProgressionRecord, UserRecord, utcnow
+from app.repositories.base import FeedbackRecord, ProgressionRecord, UserRecord, utcnow
 
 
 class InMemoryRepository:
     def __init__(self) -> None:
         self.users: dict[str, UserRecord] = {}
         self.progressions: dict[str, ProgressionRecord] = {}
+        self.feedback: list[FeedbackRecord] = []
 
     async def get_user(self, user_id: str) -> UserRecord | None:
         user = self.users.get(user_id)
@@ -47,3 +48,8 @@ class InMemoryRepository:
 
     async def delete_progression(self, progression_id: str) -> None:
         self.progressions.pop(progression_id, None)
+
+    async def save_feedback(self, feedback: FeedbackRecord) -> FeedbackRecord:
+        saved = replace(feedback, id=uuid4().hex)
+        self.feedback.append(saved)
+        return replace(saved)

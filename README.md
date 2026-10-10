@@ -36,6 +36,8 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | `CORS_ORIGINS` | localhost:3000, 127.0.0.1:3000 y GitHub Pages | Lista separada por comas. |
 | `FIREBASE_AUTH_EMULATOR_HOST` / `FIRESTORE_EMULATOR_HOST` | vacío | Emuladores locales (solo desarrollo; el de Auth se ignora en producción). |
 | `WEB_URL` | GitHub Pages de la web | Destino de los enlaces para compartir (`/p/{id}`). |
+| `SENTRY_DSN` | vacío | DSN del proyecto de Sentry para monitorear errores. Vacío lo desactiva. No envía datos personales. |
+| `MONITORING_TEST_TOKEN` | vacío | Secreto para `GET /api/v1/monitoring/test` (cabecera `X-Test-Token`), que lanza un error a propósito para comprobar Sentry. |
 | `BILLING_PROVIDER` | `mock` | Procesador de pagos. `mock` activa el plan al instante y no cobra nada (ver [Planes y suscripciones](#planes-y-suscripciones)). |
 
 ## Autenticación (Firebase)
@@ -101,6 +103,7 @@ Sin Firestore configurado, la API sigue funcionando (acordes, análisis, explora
 | GET/POST | `/api/v1/progressions` | Bearer | Biblioteca del usuario. |
 | GET | `/api/v1/progressions/{id}` | opcional | El dueño o cualquiera si `isPublic` es `true`. |
 | PUT/DELETE | `/api/v1/progressions/{id}` | Bearer | Solo el dueño. `PUT {"isPublic": true}` la comparte. |
+| POST | `/api/v1/feedback` | opcional | Opinión de testers y usuarios: `message`, `rating` (1–5), `email`, `page`, `source` (`web`/`app`). Se guarda en `chordweaver_feedback`. |
 | GET | `/p/{id}` | – | Enlace para compartir: HTML con vista previa (Open Graph) de una progresión pública que redirige al explorador de la web. |
 | GET | `/api/v1/plans` | – | Planes y precios (USD, con precio para Latinoamérica). `provider: "mock"` mientras los pagos son simulados. |
 | GET | `/api/v1/billing/subscription` | Bearer | Plan del usuario, renovación y uso (`saved` / `saveLimit`). |

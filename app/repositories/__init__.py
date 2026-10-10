@@ -13,9 +13,10 @@ from functools import lru_cache
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.repositories.base import ProgressionRecord, Repository, RepositoryUnavailableError, UserRecord
+from app.repositories.base import FeedbackRecord, ProgressionRecord, Repository, RepositoryUnavailableError, UserRecord
 
 __all__ = [
+    "FeedbackRecord",
     "ProgressionRecord",
     "Repository",
     "RepositoryUnavailableError",

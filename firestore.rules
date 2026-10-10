@@ -15,5 +15,8 @@ service cloud.firestore {
     match /chordweaver_progressions/{document=**} {
       allow read, write: if false;
     }
+    match /chordweaver_feedback/{document=**} {
+      allow read, write: if false;
+    }
   }
 }
