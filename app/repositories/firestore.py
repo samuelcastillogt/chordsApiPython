@@ -91,7 +91,7 @@ class FirestoreRepository:
         self.feedback = f"{prefix}feedback"
 
     async def healthcheck(self) -> bool:
-        await self.client.collection(self.deleted_users).document("__healthcheck__").get()
+        await self.client.collection(self.deleted_users).document("healthcheck").get()
         return True
 
     async def get_user(self, user_id: str) -> UserRecord | None:

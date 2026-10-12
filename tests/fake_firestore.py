@@ -70,6 +70,8 @@ class FakeCollection(FakeQuery):
         return self._store.setdefault(self.name, {})
 
     def document(self, doc_id: str | None = None) -> FakeDocument:
+        if doc_id and doc_id.startswith("__") and doc_id.endswith("__"):
+            raise ValueError(f'Resource id "{doc_id}" is reserved')
         return FakeDocument(self._store, self.name, doc_id or uuid4().hex[:20])
 
 
