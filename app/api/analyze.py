@@ -22,6 +22,8 @@ async def analyze_progression(request: AnalyzeRequest):
     chords = [item.chord for item in parsed]
 
     key = parse_key(request.tonality)
+    if request.tonality is not None and key is None:
+        raise HTTPException(status_code=400, detail=f"Unknown tonality: {request.tonality}")
     detected = key is None
     confidence = 1.0
     if key is None:

@@ -20,6 +20,10 @@ def category_for(total: float) -> str:
     return "natural" if total >= 70 else "media" if total >= 50 else "tensa" if total >= 30 else "extrema"
 
 
+def intent_for(total: float) -> str:
+    return "safe" if total >= 70 else "interesting" if total >= 50 else "bold"
+
+
 @lru_cache(maxsize=65536)
 def score_connection(source: ChordNode, target: ChordNode, tonality: str | None = None) -> ConnectionScore:
     breakdown = []

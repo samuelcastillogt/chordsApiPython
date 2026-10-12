@@ -84,7 +84,7 @@ NOTES = [Note.C, Note.CSHARP, Note.D, Note.DSHARP, Note.E, Note.F, Note.FSHARP, 
 NOTE_INDEX = {note: i for i, note in enumerate(NOTES)}
 FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 
-CIRCLE_OF_FIFTHS = [Note.C, Note.G, Note.D, Note.A, Note.E, Note.B, Note.FSHARP, Note.DSHARP, Note.ASHARP, Note.F, Note.CSHARP, Note.GSHARP]
+CIRCLE_OF_FIFTHS = [Note.C, Note.G, Note.D, Note.A, Note.E, Note.B, Note.FSHARP, Note.CSHARP, Note.GSHARP, Note.DSHARP, Note.ASHARP, Note.F]
 CIRCLE_INDEX = {note: i for i, note in enumerate(CIRCLE_OF_FIFTHS)}
 
 
@@ -193,28 +193,20 @@ EXACT_SUFFIXES: dict[str, ChordType] = {
     "5": ChordType.POWER,
 }
 
-# Extended or altered chords mapped to the closest chord the engine knows.
-APPROXIMATE_PREFIXES: list[tuple[str, ChordType]] = [
-    ("m7b5", ChordType.HALF_DIM7),
-    ("mmaj7", ChordType.MINOR),
-    ("maj", ChordType.MAJ7),
-    ("madd", ChordType.MINOR),
-    ("m9", ChordType.MIN7),
-    ("m11", ChordType.MIN7),
-    ("m13", ChordType.MIN7),
-    ("m7", ChordType.MIN7),
-    ("m", ChordType.MINOR),
-    ("dim", ChordType.DIM7),
-    ("7sus", ChordType.DOM7),
-    ("sus", ChordType.SUS4),
-    ("add", ChordType.ADD9),
-    ("6", ChordType.SIX),
-    ("11", ChordType.DOM9),
-    ("13", ChordType.DOM9),
-    ("9", ChordType.DOM9),
-    ("7", ChordType.DOM7),
-    ("aug", ChordType.AUG),
-    ("+", ChordType.AUG),
+# Extended or altered chords mapped to the closest chord the engine knows. Patterns
+# are anchored so arbitrary suffixes cannot be smuggled in after a valid prefix.
+APPROXIMATE_PATTERNS: list[tuple[re.Pattern[str], ChordType]] = [
+    (re.compile(r"mmaj(?:7|9|11|13)(?:[#b]\d+)*"), ChordType.MINOR),
+    (re.compile(r"maj(?:9|11|13)(?:[#b]\d+)*"), ChordType.MAJ7),
+    (re.compile(r"madd(?:2|4|6|9|11|13)"), ChordType.MINOR),
+    (re.compile(r"m(?:9|11|13)(?:[#b]\d+)*"), ChordType.MIN7),
+    (re.compile(r"dim(?:9|11|13)"), ChordType.DIM7),
+    (re.compile(r"(?:7|9|11|13)(?:[#b]\d+)*(?:sus[24]?)?"), ChordType.DOM7),
+    (re.compile(r"sus(?:2|4)?(?:add\d+)?"), ChordType.SUS4),
+    (re.compile(r"add(?:2|4|6|9|11|13)"), ChordType.ADD9),
+    (re.compile(r"6(?:add\d+)?"), ChordType.SIX),
+    (re.compile(r"aug(?:7|9|11|13)"), ChordType.AUG),
+    (re.compile(r"\+(?:7|9|11|13)"), ChordType.AUG),
 ]
 
 
@@ -267,7 +259,7 @@ def parse_chord_symbol(symbol: str, catalog: dict[str, ChordNode]) -> ParsedChor
     approximated = False
     chord_type = EXACT_SUFFIXES.get(rest)
     if chord_type is None:
-        chord_type = next((ctype for prefix, ctype in APPROXIMATE_PREFIXES if rest.startswith(prefix)), None)
+        chord_type = next((ctype for pattern, ctype in APPROXIMATE_PATTERNS if pattern.fullmatch(rest)), None)
         approximated = chord_type is not None
     if chord_type is None:
         raise ChordParseError(f"Unknown chord: {symbol}")

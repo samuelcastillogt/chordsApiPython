@@ -1,7 +1,8 @@
 import pytest
 
 from app.domain.chord import ChordNode
-from app.engine.connection_engine import find_connections, score_connection
+from app.engine.connection_engine import find_connections, intent_for, score_connection
+from app.engine.criteria import dominant_chain
 
 
 @pytest.fixture
@@ -34,14 +35,38 @@ def test_max_results_respected(all_chords):
     assert len(results) <= 5
 
 
-def test_g7_to_c_dominant_chain(all_chords):
-    g7 = next(c for c in all_chords if c.id == "G7")
-    c = next(c for c in all_chords if c.id == "C")
-    conn = score_connection(g7, c, "C")
-    assert conn.category == "natural"
-    chain = next((b for b in conn.breakdown if b.name == "dominant_chain"), None)
-    assert chain is not None
-    assert chain.raw_score == 100.0
+@pytest.mark.parametrize(
+    ("score", "intent"),
+    [(100, "safe"), (70, "safe"), (69.9, "interesting"), (50, "interesting"), (49.9, "bold"), (0, "bold")],
+)
+def test_intent_thresholds_are_deterministic(score, intent):
+    assert intent_for(score) == intent
+
+
+@pytest.mark.parametrize(
+    ("dominant", "tonic"),
+    [
+        ("C7", "F"),
+        ("G7", "C"),
+        ("D7", "G"),
+        ("A7", "D"),
+        ("E7", "A"),
+        ("B7", "E"),
+        ("F#7", "B"),
+        ("C#7", "F#"),
+        ("G#7", "C#"),
+        ("D#7", "G#"),
+        ("A#7", "D#"),
+        ("F7", "A#"),
+    ],
+)
+def test_all_v7_to_i_resolutions_are_dominant_chains(all_chords, dominant, tonic):
+    source = next(chord for chord in all_chords if chord.id == dominant)
+    target = next(chord for chord in all_chords if chord.id == tonic)
+
+    score, _ = dominant_chain(source, target)
+
+    assert score == 100.0
 
 
 def test_distinct_results_skip_colour_variants_of_the_same_chord(all_chords):

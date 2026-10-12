@@ -15,6 +15,13 @@ bearer = HTTPBearer(auto_error=False)
 LOGIN_REFRESH = timedelta(hours=1)
 
 
+def _deleted_user_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Esta cuenta fue eliminada",
+    )
+
+
 def require_auth_enabled() -> None:
     if not settings.auth_enabled:
         raise HTTPException(
@@ -38,6 +45,8 @@ async def sync_user(identity: FirebaseIdentity, repository: Repository) -> UserR
     The provider's name only seeds the profile: users can change or clear it afterwards.
     Writes happen on creation, when email or photo change, or once per LOGIN_REFRESH.
     """
+    if await repository.is_user_deleted(identity.uid):
+        raise _deleted_user_error()
     user = await repository.get_user(identity.uid)
     if user is None:
         user = UserRecord(id=identity.uid, email=identity.email, display_name=(identity.name or "").strip()[:80] or None)
@@ -50,6 +59,11 @@ async def sync_user(identity: FirebaseIdentity, repository: Repository) -> UserR
         user.photo_url = photo_url
         user.last_login_at = utcnow()
         await repository.save_user(user)
+        # DELETE writes its tombstone first. Recheck after a write so a concurrent
+        # authentication request cannot restore a user deleted in the meantime.
+        if await repository.is_user_deleted(identity.uid):
+            await repository.delete_user(identity.uid)
+            raise _deleted_user_error()
     return user
 
 

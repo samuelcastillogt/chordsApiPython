@@ -55,7 +55,11 @@ def test_deleting_the_account_removes_its_progressions(repository):
 
     assert client.delete("/api/v1/auth/me", headers=headers).status_code == 204
     assert repository.users == {} and repository.progressions == {}
+    assert repository.deleted_users == {"leaving-uid"}
     assert client.get(f"/api/v1/progressions/{progression['id']}").status_code == 404
+    retry = client.get("/api/v1/auth/me", headers=headers)
+    assert retry.status_code == 403
+    assert repository.users == {}
 
 
 def test_requests_without_a_valid_token_are_rejected():

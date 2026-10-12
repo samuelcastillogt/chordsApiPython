@@ -11,7 +11,8 @@ make dev            # http://localhost:8000
 
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
-- Salud: `http://localhost:8000/health` → `{"status": "ok", "accounts": true, "version": "0.3.0"}`
+- Salud: `http://localhost:8000/health` → `{"status": "ok", "accounts": true, "version": "0.5.0"}`
+- Disponibilidad: `http://localhost:8000/ready` comprueba una lectura real del repositorio; responde 503 sin exponer detalles si falla.
 
 Con Docker:
 
@@ -29,6 +30,9 @@ Todas las variables están documentadas en [`.env.example`](.env.example).
 | --- | --- | --- |
 | `ENVIRONMENT` | `development` | `development`, `test` o `production`. |
 | `LOG_LEVEL` | `INFO` | Nivel de logging. |
+| `RATE_LIMIT_ENABLED` | `true` | Activa el límite en memoria para aprendizaje/sugerencia de estilo, feedback y checkout. Se desactiva automáticamente en tests. |
+| `RATE_LIMIT_REQUESTS` | `30` | Peticiones permitidas por cliente, ruta y ventana. |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Duración de la ventana del rate limiter; un exceso responde 429 con `Retry-After`. |
 | `FIREBASE_PROJECT_ID` | vacío | **Obligatoria para cuentas.** ID del proyecto de Firebase: verifica los tokens y abre Firestore. Vacía: cuentas y progresiones responden 503 y `/health` devuelve `accounts: false`. |
 | `FIREBASE_SERVICE_ACCOUNT` | vacío | **Secreta.** Llave de una cuenta de servicio para Firestore: el JSON en una línea o en base64. Vacía: usa *Application Default Credentials* (`GOOGLE_APPLICATION_CREDENTIALS` o la identidad de Google Cloud). |
 | `FIRESTORE_DATABASE` | `(default)` | Nombre de la base de Firestore. |
@@ -46,7 +50,7 @@ El registro, el inicio de sesión (email y contraseña o Google), la verificaci�
 
 - La primera petición autenticada crea el usuario en Firestore (`users/{uid}`), identificado por su UID de Firebase.
 - El nombre del proveedor (por ejemplo, Google) solo se usa para crear el perfil; después el usuario puede cambiarlo o borrarlo (`PATCH /api/v1/auth/me`).
-- `DELETE /api/v1/auth/me` borra los datos del usuario (y sus progresiones). La cuenta de Firebase la borra el cliente.
+- `DELETE /api/v1/auth/me` borra los datos del usuario (y sus progresiones) y conserva solo un tombstone sin PII. El mismo token no puede recrear la cuenta. La cuenta de Firebase la borra el cliente.
 
 ### Configurar Firebase
 
@@ -56,7 +60,7 @@ El registro, el inicio de sesión (email y contraseña o Google), la verificaci�
 4. Copia el **Project ID** a `FIREBASE_PROJECT_ID` en la API. La configuración web (apiKey, authDomain…) va en el frontend.
 5. En **Firestore Database** crea la base (modo producción) y elige la región.
 6. En **Project settings → Service accounts → Generate new private key** descarga la llave y pégala en `FIREBASE_SERVICE_ACCOUNT` (JSON en una línea o `base64 -i llave.json | tr -d '\n'`). Nunca la subas al repositorio.
-7. Agrega a las reglas de Firestore (consola → Firestore → Reglas) los bloques de [`firestore.rules`](firestore.rules), que niegan el acceso directo a las colecciones de ChordWeaver. **Si el proyecto lo comparte otra app, no despliegues ese archivo**: reemplazaría todas sus reglas. Copia solo los dos bloques `match` dentro de las reglas existentes.
+7. Agrega a las reglas de Firestore (consola → Firestore → Reglas) los bloques de [`firestore.rules`](firestore.rules), que niegan el acceso directo a las colecciones de ChordWeaver. **Si el proyecto lo comparte otra app, no despliegues ese archivo**: reemplazaría todas sus reglas. Copia solo los cuatro bloques `match` dentro de las reglas existentes.
 
 ## Base de datos (Firestore)
 
@@ -65,7 +69,9 @@ Solo la API lee y escribe en Firestore, con la cuenta de servicio, que no está 
 | Colección | Documento | Campos |
 | --- | --- | --- |
 | `chordweaver_users` | UID de Firebase | `email`, `displayName`, `photoUrl`, `createdAt`, `lastLoginAt` |
+| `chordweaver_deleted_users` | UID de Firebase | `deletedAt` (tombstone durable sin PII) |
 | `chordweaver_progressions` | id automático | `ownerId`, `name`, `chords`, `tonality`, `isPublic`, `source`, `createdAt`, `updatedAt` |
+| `chordweaver_feedback` | id automático | `message`, `rating`, `email`, `page`, `source`, `userId`, `createdAt` |
 
 El prefijo (`FIRESTORE_COLLECTION_PREFIX`) permite que ChordWeaver viva en un proyecto de Firebase que ya usa otra app sin chocar con sus colecciones (por ejemplo, su propia `users`).
 
@@ -109,6 +115,20 @@ Sin Firestore configurado, la API sigue funcionando (acordes, análisis, explora
 | GET | `/api/v1/billing/subscription` | Bearer | Plan del usuario, renovación y uso (`saved` / `saveLimit`). |
 | POST | `/api/v1/billing/checkout` | Bearer | `{"plan": "pro", "period": "yearly", "region": "latam"}`. Con `mock` activa el plan; con un procesador real devolverá `checkoutUrl`. |
 | POST | `/api/v1/billing/cancel` | Bearer | Vuelve al plan Gratis; las progresiones guardadas se conservan. |
+
+Todas las respuestas incluyen `X-Request-ID`. La API conserva un identificador recibido solo si usa caracteres seguros (`A-Z`, `a-z`, `0-9`, `.`, `_`, `-`) y tiene hasta 128 caracteres; en otro caso genera un UUID.
+
+### Contrato de recomendaciones V1
+
+`GET /api/v1/chords/{símbolo}/connections`, `POST /api/v1/explore` y `POST /api/v1/style/suggest` devuelven `contractVersion: "1"`. Los elementos mantienen sus campos anteriores y exponen de forma estable:
+
+- `source`: acorde de origen.
+- `target`: acorde de destino (`chord` se conserva en `/explore`).
+- `score`: puntuación 0–100.
+- `intent`: `safe` para `score >= 70`, `interesting` para `score >= 50` y `bold` para el resto.
+- `category`, `explanation` y `breakdown`; estilo conserva además `engineScore` y su evidencia en `style`.
+
+El contrato representa recomendaciones directas. No define `nodes`, `edges` ni `matrix`.
 
 ## Planes y suscripciones
 

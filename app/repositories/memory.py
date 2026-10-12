@@ -9,8 +9,12 @@ from app.repositories.base import FeedbackRecord, ProgressionRecord, UserRecord,
 class InMemoryRepository:
     def __init__(self) -> None:
         self.users: dict[str, UserRecord] = {}
+        self.deleted_users: set[str] = set()
         self.progressions: dict[str, ProgressionRecord] = {}
         self.feedback: list[FeedbackRecord] = []
+
+    async def healthcheck(self) -> bool:
+        return True
 
     async def get_user(self, user_id: str) -> UserRecord | None:
         user = self.users.get(user_id)
@@ -19,7 +23,14 @@ class InMemoryRepository:
     async def save_user(self, user: UserRecord) -> None:
         self.users[user.id] = replace(user)
 
+    async def is_user_deleted(self, user_id: str) -> bool:
+        return user_id in self.deleted_users
+
+    async def mark_user_deleted(self, user_id: str) -> None:
+        self.deleted_users.add(user_id)
+
     async def delete_user(self, user_id: str) -> None:
+        await self.mark_user_deleted(user_id)
         self.users.pop(user_id, None)
         for progression_id in [pid for pid, item in self.progressions.items() if item.owner_id == user_id]:
             del self.progressions[progression_id]

@@ -132,13 +132,47 @@ def test_style_api_round_trip():
     suggestion = client.post("/api/v1/style/suggest", json={"profile": profile, "history": ["Cm", "Ab"], "tonality": "Cm"})
     assert suggestion.status_code == 200
     body = suggestion.json()
+    assert body["contractVersion"] == "1"
     assert body["context"] == ["i", "♭VI"]
     assert body["connections"][0]["target"] == "D#"
+    assert body["connections"][0]["source"] == "G#"
+    assert body["connections"][0]["intent"] in {"safe", "interesting", "bold"}
+    assert body["connections"][0]["explanation"]
     assert body["connections"][0]["style"]["evidence"]
 
 
 def test_style_learn_rejects_songs_without_chords():
     response = client.post("/api/v1/style/learn", json={"name": "Nada", "songs": [{"text": "hola mundo"}]})
+    assert response.status_code == 422
+
+
+def test_style_limits_song_load_and_blank_names():
+    too_many = [{"text": "C G"} for _ in range(21)]
+    too_large = [{"text": "C G " + "x" * 19996} for _ in range(11)]
+    assert client.post("/api/v1/style/learn", json={"name": "Banda", "songs": too_many}).status_code == 422
+    assert client.post("/api/v1/style/learn", json={"name": "Banda", "songs": too_large}).status_code == 422
+    assert client.post("/api/v1/style/learn", json={"name": "   ", "songs": [{"text": "C G"}]}).status_code == 422
+    assert client.post("/api/v1/style/parse", json={"text": "C" * 20001}).status_code == 422
+    assert client.post("/api/v1/style/learn", json={"name": "Banda", "songs": [{"text": "C G", "key": "H"}]}).status_code == 400
+
+
+def test_manipulated_style_profile_returns_422():
+    profile = profile_from()
+    profile["version"] = 2
+    profile["unigrams"]["0:min"] = -1
+
+    response = client.post("/api/v1/style/suggest", json={"profile": profile, "history": ["Cm"]})
+
+    assert response.status_code == 422
+
+
+def test_style_profile_rejects_excessive_aggregate_entries():
+    profile = profile_from()
+    counts = {f"token-{index}": 1 for index in range(256)}
+    profile["transitions"] = {f"context-{index}": {"n": counts, "s": counts} for index in range(100)}
+
+    response = client.post("/api/v1/style/suggest", json={"profile": profile, "history": ["Cm"]})
+
     assert response.status_code == 422
 
 

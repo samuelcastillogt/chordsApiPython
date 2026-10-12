@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from app.api.schemas import (
     StyleLearnRequest,
@@ -9,7 +10,7 @@ from app.api.schemas import (
     StyleSuggestResponse,
 )
 from app.domain.catalog import find_chord
-from app.domain.theory import detect_key, parse_key
+from app.domain.theory import Key, detect_key, parse_key
 from app.style.model import suggest
 from app.style.profile import learn_profile, tokenize_song
 from app.style.sheet_parser import parse_song
@@ -17,12 +18,18 @@ from app.style.sheet_parser import parse_song
 router = APIRouter()
 
 
-@router.post("/style/parse", response_model=StyleParseResponse)
-async def parse_song_text(request: StyleParseRequest):
-    """Reads one song (chords over lyrics, ChordPro or ASCII tab) and returns its chords and key."""
+def _explicit_key(value: str | None) -> Key | None:
+    key = parse_key(value)
+    if value is not None and key is None:
+        raise HTTPException(status_code=400, detail=f"Unknown tonality: {value}")
+    return key
+
+
+def _parse_song_text(request: StyleParseRequest) -> dict:
+    explicit_key = _explicit_key(request.key)
     song = parse_song(request.text, request.title or "Canción")
     chords = song.chords
-    key = parse_key(request.key) or (detect_key(chords).key if chords else None)
+    key = explicit_key or (detect_key(chords).key if chords else None)
     return {
         "title": song.title,
         "chords": [chord.id for chord in chords],
@@ -34,13 +41,18 @@ async def parse_song_text(request: StyleParseRequest):
     }
 
 
-@router.post("/style/learn", response_model=StyleProfileResponse)
-async def learn_style(request: StyleLearnRequest):
-    """Learns a band profile from its songs: transitions, signature chords and recurring patterns."""
+@router.post("/style/parse", response_model=StyleParseResponse)
+async def parse_song_text(request: StyleParseRequest):
+    """Reads one song (chords over lyrics, ChordPro or ASCII tab) and returns its chords and key."""
+    return await run_in_threadpool(_parse_song_text, request)
+
+
+def _learn_style(request: StyleLearnRequest) -> dict:
     songs = []
     skipped = []
     for index, item in enumerate(request.songs):
-        tokens = tokenize_song(parse_song(item.text, item.title or f"Canción {index + 1}"), item.key)
+        explicit_key = _explicit_key(item.key)
+        tokens = tokenize_song(parse_song(item.text, item.title or f"Canción {index + 1}"), explicit_key.id if explicit_key else None)
         if tokens:
             songs.append(tokens)
         else:
@@ -52,9 +64,20 @@ async def learn_style(request: StyleLearnRequest):
     return {**learn_profile(request.name.strip(), songs), "skipped": skipped}
 
 
+@router.post("/style/learn", response_model=StyleProfileResponse)
+async def learn_style(request: StyleLearnRequest):
+    """Learns a band profile from its songs: transitions, signature chords and recurring patterns."""
+    return await run_in_threadpool(_learn_style, request)
+
+
+def _suggest_in_style(request: StyleSuggestRequest) -> dict:
+    history = [find_chord(symbol) for symbol in request.history]
+    explicit_key = _explicit_key(request.tonality)
+    key = explicit_key or detect_key(history).key
+    return suggest(request.profile.model_dump(), history, key, request.weight, request.maxResults)
+
+
 @router.post("/style/suggest", response_model=StyleSuggestResponse)
 async def suggest_in_style(request: StyleSuggestRequest):
     """Next chords after ``history`` blending the band's habits with the harmonic engine."""
-    history = [find_chord(symbol) for symbol in request.history]
-    key = parse_key(request.tonality) or detect_key(history).key
-    return suggest(request.profile.model_dump(), history, key, request.weight, request.maxResults)
+    return await run_in_threadpool(_suggest_in_style, request)

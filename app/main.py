@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import analyze, auth, billing, chords, explore, feedback, progressions, share, style, tablature
 from app.core.config import settings
 from app.core.monitoring import init_monitoring
+from app.core.request_middleware import RequestMiddleware
 from app.repositories import Repository, optional_repository, repository_available
 
 logging.basicConfig(level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -26,7 +27,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 init_monitoring(VERSION)
 
 app = FastAPI(
@@ -43,6 +44,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestMiddleware)
 
 API_PREFIX = "/api/v1"
 app.include_router(chords.router, prefix=API_PREFIX, tags=["chords"])
@@ -61,6 +63,20 @@ app.include_router(style.router, prefix=API_PREFIX, tags=["style"])
 async def health_check(repository: Repository | None = Depends(optional_repository)):
     accounts = settings.auth_enabled and repository is not None
     return {"status": "ok", "accounts": accounts, "billing": settings.billing_provider, "version": app.version}
+
+
+@app.get("/ready", tags=["health"])
+async def readiness_check(repository: Repository | None = Depends(optional_repository)):
+    if repository is None:
+        raise HTTPException(status_code=503, detail="Service unavailable")
+    try:
+        healthy = await repository.healthcheck()
+    except Exception:
+        logger.exception("Repository readiness check failed")
+        healthy = False
+    if not healthy:
+        raise HTTPException(status_code=503, detail="Service unavailable")
+    return {"status": "ready"}
 
 
 @app.get(f"{API_PREFIX}/monitoring/test", include_in_schema=False)

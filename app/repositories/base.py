@@ -51,12 +51,19 @@ class FeedbackRecord:
 
 
 class Repository(Protocol):
+    async def healthcheck(self) -> bool: ...
+
     async def get_user(self, user_id: str) -> UserRecord | None: ...
 
     async def save_user(self, user: UserRecord) -> None: ...
 
+    async def is_user_deleted(self, user_id: str) -> bool: ...
+
+    async def mark_user_deleted(self, user_id: str) -> None:
+        """Persists a PII-free tombstone for a deleted Firebase uid."""
+
     async def delete_user(self, user_id: str) -> None:
-        """Deletes the user and every progression they own."""
+        """Tombstones the uid, then deletes the user and every progression they own."""
 
     async def list_progressions(self, owner_id: str) -> list[ProgressionRecord]:
         """The owner's progressions, most recently updated first."""

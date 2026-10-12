@@ -4,6 +4,7 @@ Collections (names carry FIRESTORE_COLLECTION_PREFIX, "chordweaver_" by default,
 can live in a Firebase project shared with other apps):
 - ``<prefix>users/{uid}``: email, displayName, photoUrl, createdAt, lastLoginAt, plan, planPeriod,
   planProvider, planStartedAt, planRenewsAt (id = Firebase uid).
+- ``<prefix>deleted_users/{uid}``: deletedAt only; durable, PII-free account tombstones.
 - ``<prefix>feedback/{id}``: message, rating, email, page, source, userId, createdAt (written only).
 - ``<prefix>progressions/{id}``: ownerId, name, chords, tonality, isPublic, source, createdAt, updatedAt.
 
@@ -85,8 +86,13 @@ class FirestoreRepository:
     def __init__(self, client: AsyncClient, prefix: str = "") -> None:
         self.client = client
         self.users = f"{prefix}users"
+        self.deleted_users = f"{prefix}deleted_users"
         self.progressions = f"{prefix}progressions"
         self.feedback = f"{prefix}feedback"
+
+    async def healthcheck(self) -> bool:
+        await self.client.collection(self.deleted_users).document("__healthcheck__").get()
+        return True
 
     async def get_user(self, user_id: str) -> UserRecord | None:
         snapshot = await self.client.collection(self.users).document(user_id).get()
@@ -95,7 +101,16 @@ class FirestoreRepository:
     async def save_user(self, user: UserRecord) -> None:
         await self.client.collection(self.users).document(user.id).set(_user_to_doc(user))
 
+    async def is_user_deleted(self, user_id: str) -> bool:
+        snapshot = await self.client.collection(self.deleted_users).document(user_id).get()
+        return bool(snapshot.exists)
+
+    async def mark_user_deleted(self, user_id: str) -> None:
+        await self.client.collection(self.deleted_users).document(user_id).set({"deletedAt": utcnow()})
+
     async def delete_user(self, user_id: str) -> None:
+        # Write first: even if cleanup is interrupted, a later token cannot recreate the account.
+        await self.mark_user_deleted(user_id)
         refs = [snapshot.reference async for snapshot in self._owned(user_id).stream()]
         refs.append(self.client.collection(self.users).document(user_id))
         for start in range(0, len(refs), BATCH_LIMIT):

@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
+from app.core.request_middleware import rate_limiter
 from app.main import app
 from tests.firebase_fakes import auth_headers
 
@@ -47,13 +49,19 @@ def test_get_chord_accepts_flats_and_latin_names():
 
 
 def test_parse_endpoint_reports_each_symbol():
-    response = client.post("/api/v1/chords/parse", json={"symbols": ["D/F#", "Fmaj9", "N.C."]})
+    response = client.post("/api/v1/chords/parse", json={"symbols": ["D/F#", "Fmaj9", "E7#9", "C7totally-invalid"]})
 
     assert response.status_code == 200
     results = response.json()["results"]
     assert results[0] == {"input": "D/F#", "chord": "D", "bass": "F#", "approximated": False, "error": None}
     assert results[1]["chord"] == "Fmaj7" and results[1]["approximated"] is True
-    assert results[2]["chord"] is None and results[2]["error"]
+    assert results[2]["chord"] == "E7" and results[2]["approximated"] is True
+    assert results[3]["chord"] is None and results[3]["error"]
+
+
+def test_parse_rejects_unreasonably_long_symbols():
+    response = client.post("/api/v1/chords/parse", json={"symbols": ["C" * 33]})
+    assert response.status_code == 422
 
 
 def test_get_connections_returns_scored_edges():
@@ -62,8 +70,10 @@ def test_get_connections_returns_scored_edges():
     assert response.status_code == 200
     payload = response.json()
     assert payload["source"] == "G7"
+    assert payload["contractVersion"] == "1"
     assert payload["total"] > 0
     assert payload["connections"][0]["target"].startswith("C")
+    assert {"source", "target", "score", "intent", "category", "explanation", "breakdown"} <= payload["connections"][0].keys()
 
 
 def test_explore_filters_by_preferred_tension():
@@ -75,8 +85,10 @@ def test_explore_filters_by_preferred_tension():
     assert response.status_code == 200
     payload = response.json()
     assert payload["currentChord"] == "C"
+    assert payload["contractVersion"] == "1"
     assert payload["total"] <= 5
     assert all(item["category"] == "natural" for item in payload["suggestions"])
+    assert all(item["intent"] == "safe" for item in payload["suggestions"])
 
 
 def test_analyze_returns_connections_and_tension_curve():
@@ -107,6 +119,13 @@ def test_analyze_rejects_unknown_chord():
     response = client.post("/api/v1/analyze", json={"chords": ["C", "H"]})
 
     assert response.status_code == 400
+
+
+def test_explicit_invalid_tonalities_are_rejected():
+    assert client.post("/api/v1/analyze", json={"chords": ["C", "G"], "tonality": "H"}).status_code == 400
+    assert client.post("/api/v1/explore", json={"currentChord": "C", "tonality": "H"}).status_code == 400
+    assert client.get("/api/v1/chords/C/connections", params={"tonality": "H"}).status_code == 400
+    assert client.post("/api/v1/style/parse", json={"text": "C G", "key": "H"}).status_code == 400
 
 
 def test_generate_tablature_returns_text_lines():
@@ -173,6 +192,21 @@ def test_progressions_crud_roundtrip():
     assert client.get(f"/api/v1/progressions/{progression['id']}", headers=headers).status_code == 404
 
 
+def test_progression_tonality_can_be_cleared_and_blank_names_are_rejected():
+    headers = register()
+    progression = client.post(
+        "/api/v1/progressions",
+        json={"name": "Con tonalidad", "chords": ["C", "G"], "tonality": "C"},
+        headers=headers,
+    ).json()
+
+    cleared = client.put(f"/api/v1/progressions/{progression['id']}", json={"tonality": None}, headers=headers)
+
+    assert cleared.status_code == 200
+    assert cleared.json()["tonality"] is None
+    assert client.post("/api/v1/progressions", json={"name": "   ", "chords": ["C"]}, headers=headers).status_code == 422
+
+
 def test_progressions_are_private_unless_shared():
     owner = register()
     other = register()
@@ -206,3 +240,48 @@ def test_invalid_token_is_rejected():
 def test_health_reports_accounts_available():
     body = client.get("/health").json()
     assert body["status"] == "ok" and body["accounts"] is True
+
+
+def test_readiness_checks_repository_and_hides_failures(repository):
+    assert client.get("/ready").json() == {"status": "ready"}
+
+    async def unhealthy() -> bool:
+        raise RuntimeError("database secret")
+
+    repository.healthcheck = unhealthy
+    response = client.get("/ready")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Service unavailable"}
+
+
+def test_request_id_is_propagated_or_replaced():
+    accepted = client.get("/health", headers={"X-Request-ID": "web_123.test"})
+    rejected = client.get("/health", headers={"X-Request-ID": "unsafe id\n"})
+
+    assert accepted.headers["X-Request-ID"] == "web_123.test"
+    assert rejected.headers["X-Request-ID"] != "unsafe id\n"
+    assert len(rejected.headers["X-Request-ID"]) == 36
+
+
+def test_rate_limit_returns_retry_after(monkeypatch):
+    rate_limiter.clear()
+    monkeypatch.setattr(settings, "environment", "development")
+    monkeypatch.setattr(settings, "rate_limit_requests", 1)
+    monkeypatch.setattr(settings, "rate_limit_window_seconds", 60)
+
+    first = client.post(
+        "/api/v1/feedback",
+        json={"message": "Primera opinión"},
+        headers={"Authorization": "Bearer first", "X-Forwarded-For": "203.0.113.10"},
+    )
+    limited = client.post(
+        "/api/v1/feedback",
+        json={"message": "Segunda opinión"},
+        headers={"Authorization": "Bearer second", "X-Forwarded-For": "203.0.113.10"},
+    )
+
+    assert first.status_code == 201
+    assert limited.status_code == 429
+    assert int(limited.headers["Retry-After"]) >= 1
+    assert limited.headers["X-Request-ID"]
+    rate_limiter.clear()

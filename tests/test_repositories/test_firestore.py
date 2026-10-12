@@ -63,7 +63,17 @@ def test_deleting_a_user_removes_their_progressions_in_batches(monkeypatch):
 
     assert client.store["cw_users"] == {}
     assert list(client.store["cw_progressions"]) == [keep.id]
+    tombstone = client.store["cw_deleted_users"]["uid-1"]
+    assert set(tombstone) == {"deletedAt"}
+    assert run(repository.is_user_deleted("uid-1")) is True
     assert client.batch_sizes == [2, 2]  # 3 progressions + the user document.
+
+
+def test_firestore_healthcheck_performs_a_read():
+    repository, client = make()
+
+    assert run(repository.healthcheck()) is True
+    assert "cw_deleted_users" in client.store
 
 
 def test_plan_fields_round_trip_and_progressions_are_counted():

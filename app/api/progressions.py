@@ -108,7 +108,7 @@ async def update_progression(
         changes["name"] = request.name.strip()
     if request.chords is not None:
         changes["chords"] = validate_chords(request.chords)
-    if request.tonality is not None:
+    if "tonality" in request.model_fields_set:
         changes["tonality"] = validate_tonality(request.tonality)
     if request.isPublic is not None:
         changes["is_public"] = request.isPublic

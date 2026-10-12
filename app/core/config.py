@@ -3,7 +3,7 @@
 import os
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000,https://samuelcastillogt.github.io"
@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     environment: Literal["development", "test", "production"] = "development"
     log_level: str = "INFO"
+    rate_limit_enabled: bool = True
+    rate_limit_requests: int = Field(default=30, ge=1, le=10000)
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=86400)
 
     # Firebase Authentication: the project whose ID tokens the API accepts.
     # Empty disables accounts (analysis endpoints keep working).
@@ -70,6 +73,10 @@ class Settings(BaseSettings):
     def auth_enabled(self) -> bool:
         """Accounts need a Firebase project to verify sign-in tokens against."""
         return bool(self.firebase_project_id)
+
+    @property
+    def rate_limit_active(self) -> bool:
+        return self.rate_limit_enabled and self.environment != "test"
 
     @property
     def uses_auth_emulator(self) -> bool:

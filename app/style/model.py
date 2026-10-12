@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from app.domain.catalog import BY_ID, CORE_CHORDS
 from app.domain.chord import ChordNode
 from app.domain.theory import Key
-from app.engine.connection_engine import find_connections, score_connection
+from app.engine.connection_engine import find_connections, intent_for, score_connection
 from app.style.profile import MAX_ORDER, numeral, realize, token_of
 
 ENGINE_CANDIDATES = 24
@@ -127,6 +127,7 @@ def suggest(profile: dict, history: list[ChordNode], key: Key, weight: float = 0
         proof = evidence(profile, context, token)
         results.append(
             {
+                "source": current.id,
                 "target": chord.id,
                 "score": round(weight * style_score + (1 - weight) * engine.total, 1),
                 "category": engine.category,
@@ -146,6 +147,8 @@ def suggest(profile: dict, history: list[ChordNode], key: Key, weight: float = 0
                 },
             }
         )
+        results[-1]["intent"] = intent_for(results[-1]["score"])
+        results[-1]["explanation"] = proof.text
     results.sort(key=lambda item: (-item["score"], item["target"]))
     # One suggestion per degree: F and Fmaj7 are the same move (♭VI), keep the best-scored colour.
     unique: dict[str, dict] = {}
@@ -155,6 +158,7 @@ def suggest(profile: dict, history: list[ChordNode], key: Key, weight: float = 0
 
     continuation = phrase(profile, context)
     return {
+        "contractVersion": "1",
         "source": current.id,
         "key": key.id,
         "context": [numeral(token) for token in context],
